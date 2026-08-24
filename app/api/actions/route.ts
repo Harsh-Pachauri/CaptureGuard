@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkBearerAuth } from "@/lib/api/auth";
+import { checkApiAuth } from "@/lib/api/auth";
 import { attempt, type ActionType } from "@/lib/action-guard/actionGuard";
 
 export async function POST(req: NextRequest) {
-  const authError = checkBearerAuth(req);
+  const authError = await checkApiAuth(req);
   if (authError) return authError;
 
   let body: unknown;

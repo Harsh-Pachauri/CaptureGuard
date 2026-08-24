@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkBearerAuth } from "@/lib/api/auth";
+import { checkApiAuth } from "@/lib/api/auth";
 import { prisma } from "@/lib/db/client";
 
 export async function GET(req: NextRequest) {
-  const authError = checkBearerAuth(req);
+  const authError = await checkApiAuth(req);
   if (authError) return authError;
 
   const { searchParams } = new URL(req.url);

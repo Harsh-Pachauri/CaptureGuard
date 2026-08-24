@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkBearerAuth } from "@/lib/api/auth";
+import { checkApiAuth } from "@/lib/api/auth";
 import { createOrder } from "@/lib/razorpay/client";
 
 /**
@@ -8,7 +8,7 @@ import { createOrder } from "@/lib/razorpay/client";
  * Never called from anything resembling a real storefront checkout flow.
  */
 export async function POST(req: NextRequest) {
-  const authError = checkBearerAuth(req);
+  const authError = await checkApiAuth(req);
   if (authError) return authError;
 
   let body: unknown;

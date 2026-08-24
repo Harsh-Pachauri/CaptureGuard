@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkBearerAuth } from "@/lib/api/auth";
+import { checkApiAuth } from "@/lib/api/auth";
 
 /**
  * Serves only the Razorpay Key ID (never the Key Secret — Section 13) to
@@ -8,7 +8,7 @@ import { checkBearerAuth } from "@/lib/api/auth";
  * endpoint; this is a local development convenience, not a public route.
  */
 export async function GET(req: NextRequest) {
-  const authError = checkBearerAuth(req);
+  const authError = await checkApiAuth(req);
   if (authError) return authError;
 
   const keyId = process.env.RAZORPAY_KEY_ID;

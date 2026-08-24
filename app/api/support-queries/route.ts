@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkBearerAuth } from "@/lib/api/auth";
+import { checkApiAuth } from "@/lib/api/auth";
 import { runSupportQueryPipeline } from "@/lib/pipeline/runSupportQuery";
 import { prisma } from "@/lib/db/client";
 
@@ -11,7 +11,7 @@ import { prisma } from "@/lib/db/client";
  * contract.
  */
 export async function GET(req: NextRequest) {
-  const authError = checkBearerAuth(req);
+  const authError = await checkApiAuth(req);
   if (authError) return authError;
 
   const { searchParams } = new URL(req.url);
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
  * (200), not an error.
  */
 export async function POST(req: NextRequest) {
-  const authError = checkBearerAuth(req);
+  const authError = await checkApiAuth(req);
   if (authError) return authError;
 
   let body: unknown;

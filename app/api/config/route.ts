@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkBearerAuth } from "@/lib/api/auth";
+import { checkApiAuth } from "@/lib/api/auth";
 import { prisma } from "@/lib/db/client";
 import { getMerchant } from "@/lib/db/merchant";
 
@@ -13,7 +13,7 @@ import { getMerchant } from "@/lib/db/merchant";
  * Section 4 already defines — nothing new is introduced to the schema.
  */
 export async function GET(req: NextRequest) {
-  const authError = checkBearerAuth(req);
+  const authError = await checkApiAuth(req);
   if (authError) return authError;
 
   const merchant = await getMerchant();
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const authError = checkBearerAuth(req);
+  const authError = await checkApiAuth(req);
   if (authError) return authError;
 
   let body: unknown;

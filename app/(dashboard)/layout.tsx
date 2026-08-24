@@ -1,13 +1,17 @@
-import { TokenGate } from "@/components/TokenGate";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth/session";
 import { Nav } from "@/components/Nav";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const session = await getSession();
+  if (!session.isLoggedIn) {
+    redirect("/login");
+  }
+
   return (
-    <TokenGate>
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-        <Nav />
-        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
-      </div>
-    </TokenGate>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <Nav />
+      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+    </div>
   );
 }

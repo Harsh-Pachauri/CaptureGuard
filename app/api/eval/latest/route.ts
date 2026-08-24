@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkBearerAuth } from "@/lib/api/auth";
+import { checkApiAuth } from "@/lib/api/auth";
 import { prisma } from "@/lib/db/client";
 
 /**
@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db/client";
  * batch on every page load.
  */
 export async function GET(req: NextRequest) {
-  const authError = checkBearerAuth(req);
+  const authError = await checkApiAuth(req);
   if (authError) return authError;
 
   const run = await prisma.evalRun.findFirst({

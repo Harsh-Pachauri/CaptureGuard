@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState, use as usePromise } from "react";
 import Script from "next/script";
 import { useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/client/apiClient";
-import { TokenGate } from "@/components/TokenGate";
 
 interface RazorpayCheckoutResponse {
   razorpay_payment_id: string;
@@ -138,10 +137,8 @@ function CheckoutInner({ orderId }: { orderId: string }) {
 export default function DevCheckoutPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = usePromise(params);
   return (
-    <TokenGate>
-      <Suspense fallback={null}>
-        <CheckoutInner orderId={orderId} />
-      </Suspense>
-    </TokenGate>
+    <Suspense fallback={null}>
+      <CheckoutInner orderId={orderId} />
+    </Suspense>
   );
 }

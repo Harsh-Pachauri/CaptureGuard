@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { clearStoredToken } from "@/lib/client/apiClient";
+import { usePathname, useRouter } from "next/navigation";
 
 const LINKS = [
   { href: "/", label: "Overview" },
@@ -15,6 +14,13 @@ const LINKS = [
 
 export function Nav() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -43,7 +49,7 @@ export function Nav() {
           </nav>
         </div>
         <button
-          onClick={() => clearStoredToken()}
+          onClick={signOut}
           className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
         >
           Sign out
