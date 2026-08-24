@@ -1,18 +1,20 @@
 // CaptureGuard database schema — implements Section 4 of the technical blueprint.
 //
-// Local dev uses SQLite (provider below) so the app and tests run with zero
-// external services. For deployment, switch `provider` to "postgresql" and
-// point DATABASE_URL at a Supabase (or any) Postgres instance — every type
-// used below (String, Int, Float, Boolean, DateTime, Json) is portable across
-// both providers, so no field types need to change.
+// PostgreSQL (Prisma Postgres). DATABASE_URL is the pooled connection
+// (runtime — API routes, tests); DIRECT_URL is the unpooled connection
+// (schema operations only — `prisma db push`/`migrate`; the pooled host
+// produces lock/session errors under migration-style DDL). Local dev points
+// both at the CaptureGuard-dev database; CaptureGuard-prod is configured
+// only in Vercel's environment variables, never in this repo's .env.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite" // switch to "postgresql" for deployment (see docs/ARCHITECTURE.md)
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // Single-tenant for the MVP — seeded with exactly one row (scripts/seed-merchant.ts).

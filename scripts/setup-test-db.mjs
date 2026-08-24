@@ -1,18 +1,28 @@
-// Resets and pushes the Prisma schema to a dedicated SQLite file used only
-// by integration tests, kept separate from the dev.db an agent might be
-// looking at in the running app. Deletes any existing test.db first so
-// every `npm test` run starts from a clean, empty database — tests must not
-// depend on (or accumulate) state from a previous run. Run automatically
-// via npm's `pretest` hook before `npm test`.
+// Resets and pushes the Prisma schema to the dedicated CaptureGuard-test
+// PostgreSQL database — read from TEST_DATABASE_URL / TEST_DIRECT_URL,
+// never DATABASE_URL / DIRECT_URL (CaptureGuard-dev) or anything
+// CaptureGuard-prod. `--force-reset` drops and recreates the schema so
+// every `npm test` run starts from a clean, known, empty database — tests
+// must not depend on (or accumulate) state from a previous run. This is
+// the hosted-Postgres equivalent of the old SQLite setup's "delete
+// test.db before every run." Run automatically via npm's `pretest` hook.
 import { execSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { config } from "dotenv";
 
-for (const suffix of ["", "-journal", "-wal", "-shm"]) {
-  const path = `./prisma/test.db${suffix}`;
-  if (existsSync(path)) rmSync(path);
+config();
+
+const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+const testDirectUrl = process.env.TEST_DIRECT_URL;
+
+if (!testDatabaseUrl || !testDirectUrl) {
+  console.error(
+    "TEST_DATABASE_URL and TEST_DIRECT_URL must be set in .env — CaptureGuard-test's pooled and direct " +
+      "connection strings (from Prisma Console → CaptureGuard-test → Connect)."
+  );
+  process.exit(1);
 }
 
-execSync("npx prisma db push --skip-generate --accept-data-loss", {
+execSync("npx prisma db push --skip-generate --accept-data-loss --force-reset", {
   stdio: "inherit",
-  env: { ...process.env, DATABASE_URL: "file:./prisma/test.db" },
+  env: { ...process.env, DATABASE_URL: testDatabaseUrl, DIRECT_URL: testDirectUrl },
 });
