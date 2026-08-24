@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/client";
-import { createRefund } from "@/lib/razorpay/mutationClient";
+import { createRefund, capturePayment } from "@/lib/razorpay/mutationClient";
 import * as auditService from "@/lib/audit/auditService";
 import type { Prisma } from "@prisma/client";
 
@@ -8,7 +8,7 @@ import type { Prisma } from "@prisma/client";
 // re-checks the decision's verdict server-side — never trusts that a prior
 // check (e.g. a greyed-out UI button) still holds (Section 12 #10).
 
-export type ActionType = "refund" | "compensate" | "none";
+export type ActionType = "refund" | "compensate" | "capture" | "none";
 
 interface ErrorResult {
   error: string;
@@ -174,7 +174,11 @@ async function executeMutation(
     return { action: updated };
   }
 
-  const snapshot = decision.paymentSnapshot as { razorpayPaymentId?: string };
+  const snapshot = decision.paymentSnapshot as {
+    razorpayPaymentId?: string;
+    amount?: number;
+    currency?: string;
+  };
   const razorpayPaymentId = snapshot.razorpayPaymentId;
   if (!razorpayPaymentId) {
     const failed = await updateActionWithAudit(
@@ -186,6 +190,33 @@ async function executeMutation(
   }
 
   try {
+    if (actionType === "capture") {
+      // Capture-mirror: same file, same gateway, same re-check discipline as
+      // the refund path above — amount/currency come from the live-fetched
+      // snapshot the verdict was computed from, never from client input.
+      if (typeof snapshot.amount !== "number" || !snapshot.currency) {
+        const failed = await updateActionWithAudit(
+          actionId,
+          { state: "failed" },
+          { eventType: "action_failed", detail: { error: "payment_snapshot missing amount/currency for capture", overridden: wasOverridden } }
+        );
+        return { action: failed, error: "Payment snapshot is missing amount/currency for capture.", status: 500 };
+      }
+      const captured = await capturePayment(razorpayPaymentId, {
+        amount: snapshot.amount,
+        currency: snapshot.currency,
+      });
+      const updated = await updateActionWithAudit(
+        actionId,
+        { state: "executed", executedAt: new Date() },
+        {
+          eventType: "action_executed",
+          detail: { razorpayPaymentId, capturedStatus: captured.status, capturedAmount: captured.amount, overridden: wasOverridden },
+        }
+      );
+      return { action: updated };
+    }
+
     const refund = await createRefund(razorpayPaymentId);
     const updated = await updateActionWithAudit(
       actionId,

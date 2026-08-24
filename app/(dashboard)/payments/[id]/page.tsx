@@ -2,8 +2,11 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
-import { apiFetch } from "@/lib/client/apiClient";
+import { apiFetch, ApiError } from "@/lib/client/apiClient";
 import { StatusBadge, DataSourceBadge, VerdictBadge } from "@/components/badges";
+
+const AGENT_ID = "agent_demo";
+const RECONCILIATION_EVENT_TYPES = ["payment_state_reconciled", "invalid_state_transition_rejected"];
 
 interface Payment {
   id: string;
@@ -50,16 +53,32 @@ interface Detail {
   stale: boolean;
 }
 
+interface AuditEvent {
+  id: string;
+  eventType: string;
+  detail: { from?: string; to?: string; razorpayPaymentId?: string };
+  createdAt: string;
+}
+
 export default function PaymentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [reconciliationEvents, setReconciliationEvents] = useState<AuditEvent[] | null>(null);
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   function refresh() {
     apiFetch<Detail>(`/api/payments/${id}`)
       .then(setData)
       .catch((err) => setError(err.message));
+    // Surfaces reconciliation events already produced by the sync route and
+    // the webhook's invalid-transition check — no new backend data, just
+    // reading /api/audit filtered to this payment (Section: RECONCILIATION).
+    apiFetch<{ events: AuditEvent[] }>(`/api/audit?refTable=payments&refId=${id}&limit=20`)
+      .then((r) => setReconciliationEvents(r.events.filter((e) => RECONCILIATION_EVENT_TYPES.includes(e.eventType))))
+      .catch(() => setReconciliationEvents([]));
   }
 
   useEffect(refresh, [id]);
@@ -77,10 +96,63 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  async function requestCapture() {
+    setCaptureBusy(true);
+    setCaptureError(null);
+    try {
+      await apiFetch(`/api/payments/${id}/capture`, {
+        method: "POST",
+        body: JSON.stringify({ agentId: AGENT_ID }),
+      });
+      refresh();
+    } catch (err) {
+      setCaptureError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setCaptureBusy(false);
+    }
+  }
+
+  async function attemptCapture(decisionId: string) {
+    setCaptureBusy(true);
+    setCaptureError(null);
+    try {
+      await apiFetch("/api/actions", {
+        method: "POST",
+        body: JSON.stringify({ decisionId, actionType: "capture", agentId: AGENT_ID }),
+      });
+      refresh();
+    } catch (err) {
+      setCaptureError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setCaptureBusy(false);
+    }
+  }
+
+  async function confirmCapture(actionId: string) {
+    setCaptureBusy(true);
+    setCaptureError(null);
+    try {
+      await apiFetch(`/api/actions/${actionId}/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ agentId: AGENT_ID }),
+      });
+      // Pull the fresh Razorpay state immediately via the existing sync
+      // route rather than waiting for the payment.captured webhook.
+      await apiFetch(`/api/payments/${id}/sync`, { method: "POST" });
+      refresh();
+    } catch (err) {
+      setCaptureError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setCaptureBusy(false);
+    }
+  }
+
   if (error) return <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700">{error}</div>;
   if (!data) return <div className="text-sm text-slate-400">Loading…</div>;
 
   const { payment, timeline, decisions, actions } = data;
+  const latestCaptureDecision = decisions.find((d) => d.requestedAction === "capture") ?? null;
+  const latestCaptureAction = actions.find((a) => a.actionType === "capture") ?? null;
 
   return (
     <div className="space-y-6">
@@ -172,6 +244,85 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
             </div>
           ) : null}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-3">Capture (manual)</div>
+        {!latestCaptureDecision ? (
+          <button
+            onClick={requestCapture}
+            disabled={captureBusy}
+            className="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+          >
+            {captureBusy ? "Checking…" : "Request capture"}
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <VerdictBadge verdict={latestCaptureDecision.verdict} ruleId={latestCaptureDecision.ruleId} />
+              <span className="text-xs text-slate-400">{new Date(latestCaptureDecision.createdAt).toLocaleString()}</span>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-400">{latestCaptureDecision.explanation}</p>
+
+            {latestCaptureDecision.verdict === "ALLOW" ? (
+              !latestCaptureAction ? (
+                <button
+                  onClick={() => attemptCapture(latestCaptureDecision.id)}
+                  disabled={captureBusy}
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Stage capture
+                </button>
+              ) : latestCaptureAction.state === "pending" ? (
+                <button
+                  onClick={() => confirmCapture(latestCaptureAction.id)}
+                  disabled={captureBusy}
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Confirm & execute — real Razorpay Capture API call
+                </button>
+              ) : latestCaptureAction.state === "executed" ? (
+                <div className="rounded-md bg-emerald-50 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+                  Captured. Payment status above reflects the fresh Razorpay re-fetch.
+                </div>
+              ) : (
+                <div className="rounded-md bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 p-3 text-xs text-red-800 dark:text-red-300">
+                  Action state: {latestCaptureAction.state}
+                </div>
+              )
+            ) : (
+              <button
+                onClick={requestCapture}
+                disabled={captureBusy}
+                className="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Re-check
+              </button>
+            )}
+          </div>
+        )}
+        {captureError ? <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-700">{captureError}</div> : null}
+      </div>
+
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-3">Live-state reconciliation</div>
+        {reconciliationEvents === null ? (
+          <div className="text-sm text-slate-400">Loading…</div>
+        ) : reconciliationEvents.length === 0 ? (
+          <div className="text-sm text-slate-400">No drift has been detected/corrected for this payment yet.</div>
+        ) : (
+          <ul className="space-y-2">
+            {reconciliationEvents.map((ev) => (
+              <li key={ev.id} className="flex items-center justify-between text-sm border-b border-slate-50 dark:border-slate-800/50 pb-2 last:border-0">
+                <span className="text-slate-800 dark:text-slate-200">
+                  {ev.eventType}
+                  {ev.detail.from && ev.detail.to ? ` — ${ev.detail.from} → ${ev.detail.to}` : ""}
+                </span>
+                <span className="text-xs text-slate-400">{new Date(ev.createdAt).toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

@@ -106,7 +106,7 @@ model Decision {
   id              String   @id @default(uuid())
   supportQueryId  String?  @map("support_query_id")
   paymentId       String   @map("payment_id")
-  requestedAction String   @map("requested_action") // refund|compensate|status_check|other
+  requestedAction String   @map("requested_action") // refund|compensate|status_check|capture|other
   verdict         String // ALLOW|BLOCK|ESCALATE
   ruleId          String   @map("rule_id")
   explanation     String
@@ -125,7 +125,7 @@ model Decision {
 model Action {
   id               String    @id @default(uuid())
   decisionId       String    @map("decision_id")
-  actionType       String    @map("action_type") // refund|compensate|none
+  actionType       String    @map("action_type") // refund|compensate|capture|none
   state            String    @default("pending") // pending|confirmed|executed|blocked|failed|overridden
   razorpayRefundId String?   @map("razorpay_refund_id")
   agentId          String    @map("agent_id")

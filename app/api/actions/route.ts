@@ -18,9 +18,9 @@ export async function POST(req: NextRequest) {
   const actionType = input.actionType as ActionType;
   const agentId = typeof input.agentId === "string" ? input.agentId : null;
 
-  if (!decisionId || !agentId || !["refund", "compensate", "none"].includes(actionType)) {
+  if (!decisionId || !agentId || !["refund", "compensate", "capture", "none"].includes(actionType)) {
     return NextResponse.json(
-      { error: "decisionId, agentId, and actionType (refund|compensate|none) are required" },
+      { error: "decisionId, agentId, and actionType (refund|compensate|capture|none) are required" },
       { status: 400 }
     );
   }

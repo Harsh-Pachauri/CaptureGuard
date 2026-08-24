@@ -43,11 +43,25 @@ If that call fails, `sourceAvailable: false` is passed to the engine, and rule *
 
 ## The security boundary that's enforced structurally, not just by convention
 
-`lib/razorpay/mutationClient.ts` exports `createRefund()`. It is imported in exactly one place:
-`lib/action-guard/actionGuard.ts`. Nowhere else in the codebase — not the AI module, not a route
-handler directly, not the matcher — imports it. A `grep -rn "mutationClient" --include=*.ts` from the
-repo root should always return exactly two files: the module itself and the Action Guard. This is
-what makes "the AI accidentally calls the refund API" architecturally impossible.
+`lib/razorpay/mutationClient.ts` exports `createRefund()` and `capturePayment()` (the capture-mirror
+extension's manual-capture counterpart, added later — same file, same boundary, no exception carved
+out for it). It is imported in exactly one place: `lib/action-guard/actionGuard.ts`. Nowhere else in
+the codebase — not the AI module, not a route handler directly, not the matcher, not
+`lib/pipeline/runCaptureRequest.ts` (which only ever creates a Decision) — imports it. A
+`grep -rn "mutationClient" --include=*.ts` from the repo root should always return exactly two files:
+the module itself and the Action Guard. This is what makes "the AI accidentally calls the refund or
+capture API" architecturally impossible.
+
+## Capture-mirror (R9–R11)
+
+Manual capture mirrors the refund safety architecture rather than extending R0–R8: three new rules
+(R9 ALLOW / R10 BLOCK / R11 ESCALATE-catch-all) are inserted between R4 and R5, each gated on
+`requestedAction === "capture"` so they are a no-op for every existing action and R0–R8's own code and
+relative order are untouched. Capture has its own entry point, `lib/pipeline/runCaptureRequest.ts` —
+deliberately not routed through AI extraction (`lib/ai/schema.ts` is untouched): capture is a merchant
+operational action naming an exact payment id, not something inferred from customer support text.
+It only ever produces a Decision; execution still goes exclusively through the existing, unmodified
+`POST /api/actions` → attempt → confirm/override gateway.
 
 ## Why the auto-reversal-vs-merchant-refund distinction doesn't depend on an unverified webhook field
 

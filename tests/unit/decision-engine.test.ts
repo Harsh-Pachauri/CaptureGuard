@@ -244,10 +244,140 @@ describe("DecisionEngine — R8 (unknown combination default)", () => {
       "unknown",
     ];
     for (const status of statuses) {
-      for (const requestedAction of ["refund", "compensate", "status_check", "other"] as const) {
+      for (const requestedAction of ["refund", "compensate", "status_check", "capture", "other"] as const) {
         expect(() => decide(baseInput({ status, requestedAction }))).not.toThrow();
       }
     }
+  });
+});
+
+describe("DecisionEngine — R9 (capture-mirror: safe window)", () => {
+  it("ALLOWs a capture request while authorized, uncaptured, inside the window", () => {
+    const d = decide(
+      baseInput({
+        requestedAction: "capture",
+        status: "authorized",
+        captured: false,
+        razorpayCreatedAt: hoursAgo(1),
+        autoReversalWindowHours: 24,
+      })
+    );
+    expect(d.verdict).toBe("ALLOW");
+    expect(d.ruleId).toBe("R9");
+  });
+
+  it("boundary: one minute before the window elapses still ALLOWs capture", () => {
+    const d = decide(
+      baseInput({
+        requestedAction: "capture",
+        status: "authorized",
+        captured: false,
+        autoReversalWindowHours: 1,
+        razorpayCreatedAt: hoursAgo(1 - 1 / 60),
+      })
+    );
+    expect(d.ruleId).toBe("R9");
+    expect(d.verdict).toBe("ALLOW");
+  });
+
+  it("boundary: one minute after the window elapses falls to R11 (ESCALATE), never silently ALLOWs", () => {
+    const d = decide(
+      baseInput({
+        requestedAction: "capture",
+        status: "authorized",
+        captured: false,
+        autoReversalWindowHours: 1,
+        razorpayCreatedAt: hoursAgo(1 + 1 / 60),
+      })
+    );
+    expect(d.ruleId).toBe("R11");
+    expect(d.verdict).toBe("ESCALATE");
+  });
+
+  it("does not fire for a refund request in the identical state (R9 is capture-only, R4 still owns this state for refund)", () => {
+    const d = decide(
+      baseInput({
+        requestedAction: "refund",
+        status: "authorized",
+        captured: false,
+        razorpayCreatedAt: hoursAgo(1),
+        autoReversalWindowHours: 24,
+      })
+    );
+    expect(d.ruleId).toBe("R4");
+    expect(d.verdict).toBe("BLOCK");
+  });
+});
+
+describe("DecisionEngine — R10 (capture-mirror: never double-capture)", () => {
+  it("BLOCKs a capture request when the payment is already captured", () => {
+    const d = decide(baseInput({ requestedAction: "capture", status: "captured", captured: true }));
+    expect(d.verdict).toBe("BLOCK");
+    expect(d.ruleId).toBe("R10");
+  });
+
+  it("does not affect a refund request on the same already-captured payment (R3 still owns this state for refund)", () => {
+    const d = decide(
+      baseInput({ requestedAction: "refund", status: "captured", captured: true, existingRefundOnRecord: false })
+    );
+    expect(d.ruleId).toBe("R3");
+    expect(d.verdict).toBe("ALLOW");
+  });
+});
+
+describe("DecisionEngine — R11 (capture-mirror: catch-all, never a guessed ALLOW)", () => {
+  it("ESCALATEs a capture request against a failed payment (not R7's refund-shaped 'nothing to protect' ALLOW)", () => {
+    const d = decide(baseInput({ requestedAction: "capture", status: "failed", captured: false }));
+    expect(d.verdict).toBe("ESCALATE");
+    expect(d.ruleId).toBe("R11");
+    expect(d.verdict).not.toBe("ALLOW");
+  });
+
+  it("BLOCKs (R10, not R11) a capture request against an already-refunded payment — refunded implies captured=true", () => {
+    const d = decide(baseInput({ requestedAction: "capture", status: "refunded", captured: true }));
+    expect(d.verdict).toBe("BLOCK");
+    expect(d.ruleId).toBe("R10");
+  });
+
+  it("ESCALATEs a capture request against an auto-reversed payment (Razorpay already reversed the authorization itself)", () => {
+    const d = decide(baseInput({ requestedAction: "capture", status: "auto_reversed", captured: false }));
+    expect(d.verdict).toBe("ESCALATE");
+    expect(d.ruleId).toBe("R11");
+  });
+
+  it("ESCALATEs a capture request against an unknown status rather than throwing", () => {
+    expect(() => decide(baseInput({ requestedAction: "capture", status: "unknown", captured: false }))).not.toThrow();
+    const d = decide(baseInput({ requestedAction: "capture", status: "unknown", captured: false }));
+    expect(d.verdict).toBe("ESCALATE");
+    expect(d.ruleId).toBe("R11");
+  });
+
+  it("R0 (source unavailable) still takes priority over every capture rule", () => {
+    const d = decide(
+      baseInput({
+        requestedAction: "capture",
+        status: "authorized",
+        captured: false,
+        razorpayCreatedAt: hoursAgo(1),
+        sourceAvailable: false,
+      })
+    );
+    expect(d.ruleId).toBe("R0");
+    expect(d.verdict).toBe("ESCALATE");
+  });
+
+  it("R1 (low match confidence) still takes priority over a capture request that would otherwise ALLOW", () => {
+    const d = decide(
+      baseInput({
+        requestedAction: "capture",
+        status: "authorized",
+        captured: false,
+        razorpayCreatedAt: hoursAgo(1),
+        matchConfidence: 0.3,
+      })
+    );
+    expect(d.ruleId).toBe("R1");
+    expect(d.verdict).toBe("ESCALATE");
   });
 });
 

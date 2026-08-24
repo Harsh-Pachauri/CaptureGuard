@@ -16,8 +16,10 @@ const EVENT_TONE: Record<string, string> = {
   action_blocked: "text-red-600 dark:text-red-400",
   action_failed: "text-red-600 dark:text-red-400",
   webhook_signature_invalid: "text-red-600 dark:text-red-400",
+  invalid_state_transition_rejected: "text-red-600 dark:text-red-400",
   override_recorded: "text-amber-600 dark:text-amber-400",
   override_attempted: "text-amber-600 dark:text-amber-400",
+  payment_state_reconciled: "text-amber-600 dark:text-amber-400",
   action_executed: "text-emerald-600 dark:text-emerald-400",
 };
 
@@ -57,6 +59,8 @@ export default function AuditPage() {
           <option value="payment_match_failed">payment_match_failed</option>
           <option value="low_confidence_escalation">low_confidence_escalation</option>
           <option value="razorpay_api_unavailable">razorpay_api_unavailable</option>
+          <option value="payment_state_reconciled">payment_state_reconciled</option>
+          <option value="invalid_state_transition_rejected">invalid_state_transition_rejected</option>
         </select>
       </div>
 

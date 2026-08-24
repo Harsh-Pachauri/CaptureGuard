@@ -12,6 +12,7 @@ export type RequestedAction =
   | "refund"
   | "compensate"
   | "status_check"
+  | "capture"
   | "other";
 
 export type Verdict = "ALLOW" | "BLOCK" | "ESCALATE";

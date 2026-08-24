@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createRefundMock = vi.fn();
+const capturePaymentMock = vi.fn();
 vi.mock("@/lib/razorpay/mutationClient", () => ({
   createRefund: (...args: unknown[]) => createRefundMock(...args),
+  capturePayment: (...args: unknown[]) => capturePaymentMock(...args),
 }));
 
 // Imported after the mock so actionGuard picks up the mocked mutation client.
@@ -48,8 +50,40 @@ async function seedDecision(verdict: "ALLOW" | "BLOCK" | "ESCALATE") {
   return { payment, decision };
 }
 
+async function seedCaptureDecision(verdict: "ALLOW" | "BLOCK" | "ESCALATE") {
+  const merchant = await seedMerchant();
+  const razorpayPaymentId = `pay_TEST${Math.random().toString(36).slice(2, 14)}`;
+  // ALLOW: authorized+uncaptured, inside window (R9). BLOCK: already captured (R10).
+  // ESCALATE: failed, doesn't match a known-safe capture pattern (R11).
+  const status = verdict === "BLOCK" ? "captured" : verdict === "ALLOW" ? "authorized" : "failed";
+  const payment = await prisma.payment.create({
+    data: {
+      razorpayPaymentId,
+      merchantId: merchant.id,
+      status,
+      captured: verdict === "BLOCK",
+      amount: 50000,
+      currency: "INR",
+      razorpayCreatedAt: new Date(),
+      dataSource: "eval",
+    },
+  });
+  const decision = await prisma.decision.create({
+    data: {
+      paymentId: payment.id,
+      requestedAction: "capture",
+      verdict,
+      ruleId: verdict === "BLOCK" ? "R10" : verdict === "ALLOW" ? "R9" : "R11",
+      explanation: `test capture ${verdict} explanation`,
+      paymentSnapshot: { razorpayPaymentId, amount: 50000, currency: "INR" },
+    },
+  });
+  return { payment, decision };
+}
+
 beforeEach(() => {
   createRefundMock.mockReset();
+  capturePaymentMock.mockReset();
 });
 
 describe("ActionGuard — a BLOCK verdict is never bypassed", () => {
@@ -178,5 +212,95 @@ describe("ActionGuard — override", () => {
     const result: any = await override(attemptResult.action.id, "agent_1", "trying to override an ALLOW");
     expect(result.status).toBe(400);
     expect(createRefundMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ActionGuard — capture-mirror uses the same gateway, never the refund mutation", () => {
+  it("BLOCK (already captured) never touches either mutation function", async () => {
+    const { decision } = await seedCaptureDecision("BLOCK");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: any = await attempt({ decisionId: decision.id, actionType: "capture", agentId: "agent_1" });
+    expect(result.status).toBe(409);
+    expect(capturePaymentMock).not.toHaveBeenCalled();
+    expect(createRefundMock).not.toHaveBeenCalled();
+  });
+
+  it("ESCALATE (unsafe pattern) is never confirmable — attempt() does not grant requiresConfirmation", async () => {
+    const { decision } = await seedCaptureDecision("ESCALATE");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: any = await attempt({ decisionId: decision.id, actionType: "capture", agentId: "agent_1" });
+    expect(result.requiresConfirmation).toBeFalsy();
+    expect(capturePaymentMock).not.toHaveBeenCalled();
+  });
+
+  it("ALLOW requires an explicit confirm before capturePayment is ever called", async () => {
+    const { decision } = await seedCaptureDecision("ALLOW");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: any = await attempt({ decisionId: decision.id, actionType: "capture", agentId: "agent_1" });
+    expect(result.requiresConfirmation).toBe(true);
+    expect(capturePaymentMock).not.toHaveBeenCalled();
+    expect(createRefundMock).not.toHaveBeenCalled();
+  });
+
+  it("confirmAndExecute() on ALLOW calls capturePayment exactly once with amount/currency from the snapshot, never createRefund", async () => {
+    capturePaymentMock.mockResolvedValue({
+      id: "pay_x",
+      entity: "payment",
+      order_id: null,
+      status: "captured",
+      captured: true,
+      amount: 50000,
+      currency: "INR",
+      created_at: 0,
+      notes: {},
+    });
+    const { decision, payment } = await seedCaptureDecision("ALLOW");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const attemptResult: any = await attempt({ decisionId: decision.id, actionType: "capture", agentId: "agent_1" });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const confirmResult: any = await confirmAndExecute(attemptResult.action.id, "agent_1");
+    expect(capturePaymentMock).toHaveBeenCalledTimes(1);
+    expect(capturePaymentMock).toHaveBeenCalledWith(payment.razorpayPaymentId, {
+      amount: 50000,
+      currency: "INR",
+    });
+    expect(createRefundMock).not.toHaveBeenCalled();
+    expect(confirmResult.action.state).toBe("executed");
+  });
+
+  it("marks the action failed, not silently retried, when the Razorpay capture call fails", async () => {
+    capturePaymentMock.mockRejectedValue(new Error("Razorpay capture failed (400)"));
+    const { decision } = await seedCaptureDecision("ALLOW");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const attemptResult: any = await attempt({ decisionId: decision.id, actionType: "capture", agentId: "agent_1" });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const confirmResult: any = await confirmAndExecute(attemptResult.action.id, "agent_1");
+    expect(confirmResult.action.state).toBe("failed");
+    expect(capturePaymentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("override is available for a BLOCKed capture too (the same generic mechanism, not a capture-specific bypass)", async () => {
+    capturePaymentMock.mockResolvedValue({
+      id: "pay_x",
+      entity: "payment",
+      order_id: null,
+      status: "captured",
+      captured: true,
+      amount: 50000,
+      currency: "INR",
+      created_at: 0,
+      notes: {},
+    });
+    const { decision } = await seedCaptureDecision("BLOCK");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const attemptResult: any = await attempt({ decisionId: decision.id, actionType: "capture", agentId: "agent_1" });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: any = await override(
+      attemptResult.action.id,
+      "agent_1",
+      "Confirmed with Razorpay support this specific case is safe to force."
+    );
+    expect(result.action.state).toBe("executed");
+    expect(capturePaymentMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -9,6 +9,7 @@
 // instead.
 
 import { razorpayAuthHeader, requestWithRetry, safeJson } from "./http";
+import type { RazorpayPayment } from "./client";
 
 const BASE_URL = "https://api.razorpay.com/v1";
 
@@ -48,4 +49,38 @@ export async function createRefund(
   }
 
   return res.json() as Promise<RazorpayRefund>;
+}
+
+/**
+ * Capture-mirror: the manual-capture counterpart to createRefund above,
+ * same real-endpoint/same-file/same-import-boundary treatment. Razorpay
+ * requires amount+currency on the capture call to match the authorized
+ * payment exactly — the caller (Action Guard) supplies them from the same
+ * live-fetched snapshot the Decision Engine verdict was computed from,
+ * never from client input.
+ */
+export async function capturePayment(
+  paymentId: string,
+  input: { amount: number; currency: string }
+): Promise<RazorpayPayment> {
+  const res = await requestWithRetry(
+    `${BASE_URL}/payments/${paymentId}/capture`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: razorpayAuthHeader(),
+      },
+      body: JSON.stringify({ amount: input.amount, currency: input.currency }),
+    }
+  );
+
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new Error(
+      `Razorpay capture failed (${res.status}): ${JSON.stringify(body)}`
+    );
+  }
+
+  return res.json() as Promise<RazorpayPayment>;
 }

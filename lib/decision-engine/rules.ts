@@ -163,6 +163,69 @@ export const RULES: Rule[] = [
     },
   },
   {
+    id: "R9",
+    reasoning:
+      "Capture-mirror: the ordinary, unambiguous case — authorized, uncaptured, still inside the window. This is exactly what manual capture exists for.",
+    check: (input) => {
+      if (
+        input.requestedAction === "capture" &&
+        input.status === "authorized" &&
+        !input.captured &&
+        elapsedHours(input.razorpayCreatedAt, input.now) < input.autoReversalWindowHours
+      ) {
+        return {
+          verdict: "ALLOW",
+          ruleId: "R9",
+          explanation:
+            `Payment ${input.razorpayPaymentId} is authorized, not yet captured, and within the ` +
+            `${input.autoReversalWindowHours}-hour window (began ${input.razorpayCreatedAt}). Capturing now is ` +
+            `the ordinary case — proceeding will call Razorpay's real Capture API once you confirm.`,
+          groundedFields: groundedFields(input),
+        };
+      }
+      return null;
+    },
+  },
+  {
+    id: "R10",
+    reasoning:
+      "Capture-mirror: never double-capture an already-captured payment.",
+    check: (input) => {
+      if (input.requestedAction === "capture" && input.captured === true) {
+        return {
+          verdict: "BLOCK",
+          ruleId: "R10",
+          explanation:
+            `Payment ${input.razorpayPaymentId} is already captured (as of the last check, ${input.now}). ` +
+            `Capturing again is not a valid operation and is blocked — there is nothing left to capture.`,
+          groundedFields: groundedFields(input),
+        };
+      }
+      return null;
+    },
+  },
+  {
+    id: "R11",
+    reasoning:
+      "Capture-mirror catch-all: any capture request that isn't the two known-safe/known-unsafe cases above " +
+      "(not authorized, or authorized but past the window and possibly already auto-reversed by Razorpay) " +
+      "never gets a guessed verdict — positioned ahead of R7 specifically so a capture request on a failed " +
+      "payment doesn't fall into R7's unguarded 'failed → ALLOW', which is refund-shaped reasoning, not capture-shaped.",
+    check: (input) => {
+      if (input.requestedAction !== "capture") return null;
+      return {
+        verdict: "ESCALATE",
+        ruleId: "R11",
+        explanation:
+          `Payment ${input.razorpayPaymentId} (status="${input.status}", captured=${input.captured}) doesn't ` +
+          `match the known-safe capture pattern (authorized, uncaptured, within the ` +
+          `${input.autoReversalWindowHours}-hour window). Rather than guess, this is flagged for a human to check ` +
+          `the Razorpay Dashboard directly before any capture is attempted.`,
+        groundedFields: groundedFields(input),
+      };
+    },
+  },
+  {
     id: "R5",
     reasoning:
       "Razorpay's own stated SLA has passed with nothing seen — a genuine exception needing a human to check directly, not a system guess.",
