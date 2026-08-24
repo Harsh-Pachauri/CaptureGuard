@@ -37,8 +37,11 @@ async function seedMerchant() {
 function samplePayload(overrides: any = {}) {
   const paymentId = `pay_WEBHOOKTEST${Math.random().toString(36).slice(2, 10)}`;
   return {
-    id: `evt_${Math.random().toString(36).slice(2, 14)}`,
+    entity: "event",
+    account_id: "acc_TEST",
     event: "payment.authorized",
+    contains: ["payment"],
+    created_at: Math.floor(Date.now() / 1000),
     payload: {
       payment: {
         entity: {
@@ -119,6 +122,27 @@ describe("Webhook receiver — dedupe", () => {
     expect(body2.status).toBe("duplicate");
     expect(fetchPaymentMock).toHaveBeenCalledTimes(1); // not reprocessed
   });
+
+  it("does not treat authorized and captured for the same payment as duplicates", async () => {
+    const authorized = samplePayload();
+    const captured = samplePayload({
+      event: "payment.captured",
+      payload: {
+        payment: { entity: { ...authorized.payload.payment.entity, status: "captured", captured: true } },
+      },
+    });
+    fetchPaymentMock.mockResolvedValue(authorized.payload.payment.entity);
+
+    const rawAuthorized = JSON.stringify(authorized);
+    const res1 = await POST(buildRequest(rawAuthorized, signBody(rawAuthorized)));
+    expect(res1.status).toBe(200);
+    expect((await res1.json()).status).not.toBe("duplicate");
+
+    const rawCaptured = JSON.stringify(captured);
+    const res2 = await POST(buildRequest(rawCaptured, signBody(rawCaptured)));
+    expect(res2.status).toBe(200);
+    expect((await res2.json()).status).not.toBe("duplicate");
+  });
 });
 
 describe("Webhook receiver — malformed payloads", () => {
@@ -129,7 +153,7 @@ describe("Webhook receiver — malformed payloads", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects a well-formed JSON payload missing id/event fields", async () => {
+  it("rejects a well-formed JSON payload missing event/created_at fields", async () => {
     const raw = JSON.stringify({ payload: {} });
     const res = await POST(buildRequest(raw, signBody(raw)));
     expect(res.status).toBe(400);

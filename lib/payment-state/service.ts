@@ -162,7 +162,7 @@ export async function getLive(razorpayPaymentId: string): Promise<GetLiveResult>
   }
 }
 
-function extractPaymentEntityId(payload: unknown): string | null {
+export function extractPaymentEntityId(payload: unknown): string | null {
   const p = payload as {
     payload?: {
       payment?: { entity?: { id?: string } };

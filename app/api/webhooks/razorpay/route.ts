@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/client";
 import { verifyWebhookSignature } from "@/lib/razorpay/webhookVerify";
-import { applyEvent } from "@/lib/payment-state/service";
+import { applyEvent, extractPaymentEntityId } from "@/lib/payment-state/service";
 import * as auditService from "@/lib/audit/auditService";
 
 const SUPPORTED_EVENTS = new Set([
@@ -47,17 +47,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Malformed payload" }, { status: 400 });
   }
 
-  const eventId = payload.id;
   const eventType = payload.event;
-  if (typeof eventId !== "string" || typeof eventType !== "string") {
+  const createdAt = payload.created_at;
+  if (typeof eventType !== "string" || typeof createdAt !== "number") {
     await auditService.record({
       eventType: "webhook_malformed_payload",
       refTable: "webhook_events",
       refId: "unknown",
-      detail: { reason: "missing id/event field", bodyPreview: rawBody.slice(0, 200) },
+      detail: { reason: "missing event/created_at field", bodyPreview: rawBody.slice(0, 200) },
     });
-    return NextResponse.json({ error: "Malformed payload: missing id/event" }, { status: 400 });
+    return NextResponse.json({ error: "Malformed payload: missing event/created_at" }, { status: 400 });
   }
+
+  // Razorpay's webhook body carries no event-id field of its own (unlike
+  // e.g. Stripe's `id: evt_...`) — `event` + `created_at` + the affected
+  // payment/refund id is what's stable across Razorpay's retries of the
+  // same delivery and distinct across genuinely different events.
+  const entityId = extractPaymentEntityId(payload);
+  const eventId = entityId ? `${eventType}:${createdAt}:${entityId}` : `${eventType}:${createdAt}`;
 
   let webhookEventRow;
   try {
