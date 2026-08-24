@@ -1,5 +1,6 @@
 import { validateExtraction, type IntentExtraction } from "./schema";
 import { callAnthropic } from "./providers/anthropic";
+import { callGemini } from "./providers/gemini";
 
 export interface ExtractContext {
   customerRef?: string;
@@ -70,9 +71,11 @@ async function callProvider(
   switch (provider) {
     case "anthropic":
       return callAnthropic(text, context);
+    case "gemini":
+      return callGemini(text, context);
     default:
       throw new Error(
-        `Unknown AI_PROVIDER "${provider}" — supported: none, anthropic`
+        `Unknown AI_PROVIDER "${provider}" — supported: none, anthropic, gemini`
       );
   }
 }
