@@ -1,0 +1,203 @@
+// CaptureGuard database schema — implements Section 4 of the technical blueprint.
+//
+// Local dev uses SQLite (provider below) so the app and tests run with zero
+// external services. For deployment, switch `provider` to "postgresql" and
+// point DATABASE_URL at a Supabase (or any) Postgres instance — every type
+// used below (String, Int, Float, Boolean, DateTime, Json) is portable across
+// both providers, so no field types need to change.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // switch to "postgresql" for deployment (see docs/ARCHITECTURE.md)
+  url      = env("DATABASE_URL")
+}
+
+// Single-tenant for the MVP — seeded with exactly one row (scripts/seed-merchant.ts).
+model Merchant {
+  id                        String   @id @default(uuid())
+  name                      String
+  autoReversalWindowHours   Float    @map("auto_reversal_window_hours")
+  matchConfidenceThreshold  Float    @default(0.7) @map("match_confidence_threshold")
+  createdAt                 DateTime @default(now()) @map("created_at")
+
+  payments Payment[]
+
+  @@map("merchants")
+}
+
+// dataSource distinguishes REAL RAZORPAY DATA ("real") from seeded historical
+// FIXTURES ("fixture" — backdated razorpay_created_at to demo a past-window
+// state honestly, never presented as something that just happened) and
+// EVALUATION DATA ("eval" — synthetic, used only by the eval runner).
+model Payment {
+  id                 String    @id @default(uuid())
+  razorpayPaymentId  String    @unique @map("razorpay_payment_id")
+  razorpayOrderId    String?   @map("razorpay_order_id")
+  merchantId         String    @map("merchant_id")
+  status             String // created|authorized|captured|failed|refunded|partially_refunded|auto_reversed|unknown
+  captured           Boolean   @default(false)
+  amount             Int // paise
+  currency           String    @default("INR")
+  customerRef        String?   @map("customer_ref")
+  razorpayCreatedAt  DateTime  @map("razorpay_created_at")
+  lastSyncedAt       DateTime  @default(now()) @map("last_synced_at")
+  rawLastPayload     Json?   @map("raw_last_payload") // most recent full Razorpay payment object
+  dataSource         String    @default("real") @map("data_source") // real|fixture|eval
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  merchant       Merchant        @relation(fields: [merchantId], references: [id])
+  decisions      Decision[]
+  supportQueries SupportQuery[]
+  webhookEvents  WebhookEvent[]
+
+  @@index([status, captured])
+  @@index([customerRef])
+  @@map("payments")
+}
+
+model WebhookEvent {
+  id                String    @id @default(uuid())
+  razorpayEventId   String    @unique @map("razorpay_event_id")
+  eventType         String    @map("event_type")
+  payload           Json // full verified payload
+  signatureValid    Boolean   @map("signature_valid")
+  // Extracted from payload.payload.payment.entity.id at ingestion time so the
+  // payment detail timeline (GET /api/payments/:id) can be queried directly
+  // instead of scanning JSON payloads — a practical indexing detail, not a
+  // change to the blueprint's event semantics.
+  razorpayPaymentId String?   @map("razorpay_payment_id")
+  paymentId         String?   @map("payment_id")
+  processedAt       DateTime? @map("processed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([razorpayPaymentId])
+  @@map("webhook_events")
+}
+
+model SupportQuery {
+  id               String   @id @default(uuid())
+  rawText          String   @map("raw_text")
+  language         String?
+  customerRef      String?  @map("customer_ref")
+  aiExtraction     Json?  @map("ai_extraction") // validated structured AI output
+  matchedPaymentId String?  @map("matched_payment_id")
+  matchConfidence  Float?   @map("match_confidence")
+  matchMethod      String?  @map("match_method")
+  status           String   @default("new") // new|decided|resolved|escalated
+  source           String   @default("demo") // demo|eval
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  matchedPayment Payment?   @relation(fields: [matchedPaymentId], references: [id])
+  decisions      Decision[]
+
+  @@index([matchedPaymentId])
+  @@index([status])
+  @@map("support_queries")
+}
+
+model Decision {
+  id              String   @id @default(uuid())
+  supportQueryId  String?  @map("support_query_id")
+  paymentId       String   @map("payment_id")
+  requestedAction String   @map("requested_action") // refund|compensate|status_check|other
+  verdict         String // ALLOW|BLOCK|ESCALATE
+  ruleId          String   @map("rule_id")
+  explanation     String
+  paymentSnapshot Json   @map("payment_snapshot") // the exact live-fetched state the verdict was computed from
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  payment      Payment       @relation(fields: [paymentId], references: [id])
+  supportQuery SupportQuery? @relation(fields: [supportQueryId], references: [id])
+  actions      Action[]
+
+  @@index([paymentId])
+  @@index([verdict])
+  @@map("decisions")
+}
+
+model Action {
+  id               String    @id @default(uuid())
+  decisionId       String    @map("decision_id")
+  actionType       String    @map("action_type") // refund|compensate|none
+  state            String    @default("pending") // pending|confirmed|executed|blocked|failed|overridden
+  razorpayRefundId String?   @map("razorpay_refund_id")
+  agentId          String    @map("agent_id")
+  overrideReason   String?   @map("override_reason")
+  executedAt       DateTime? @map("executed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  decision Decision @relation(fields: [decisionId], references: [id])
+
+  @@index([decisionId])
+  @@index([state])
+  @@map("actions")
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid())
+  eventType String   @map("event_type")
+  refTable  String   @map("ref_table")
+  refId     String   @map("ref_id")
+  detail    Json // full structured detail
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([refTable, refId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("audit_events")
+}
+
+// 100% SYNTHETIC FOR EVALUATION — never mixed with real customer data.
+model EvalCase {
+  id                    String   @id @default(uuid())
+  category              String
+  queryText             String?  @map("query_text")
+  language              String?
+  paymentFixture        Json   @map("payment_fixture")
+  groundTruthIntent     String?  @map("ground_truth_intent")
+  groundTruthPaymentRef String?  @map("ground_truth_payment_ref")
+  groundTruthVerdict    String   @map("ground_truth_verdict")
+  isAdversarial         Boolean  @default(false) @map("is_adversarial")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  results EvalResult[]
+
+  @@map("eval_cases")
+}
+
+model EvalRun {
+  id         String    @id @default(uuid())
+  startedAt  DateTime  @default(now()) @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  notes      String?
+
+  results EvalResult[]
+
+  @@map("eval_runs")
+}
+
+model EvalResult {
+  id                  String   @id @default(uuid())
+  evalRunId           String   @map("eval_run_id")
+  evalCaseId          String   @map("eval_case_id")
+  predictedIntent     String?  @map("predicted_intent")
+  predictedPaymentRef String?  @map("predicted_payment_ref")
+  predictedVerdict    String?  @map("predicted_verdict")
+  correctIntent       Boolean? @map("correct_intent")
+  correctMatch        Boolean? @map("correct_match")
+  correctVerdict      Boolean? @map("correct_verdict")
+  grounded            Boolean? // response-grounding check result
+  rawAiOutput         Json?  @map("raw_ai_output")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  evalRun  EvalRun  @relation(fields: [evalRunId], references: [id])
+  evalCase EvalCase @relation(fields: [evalCaseId], references: [id])
+
+  @@index([evalRunId])
+  @@map("eval_results")
+}

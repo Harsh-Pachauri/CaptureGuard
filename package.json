@@ -1,0 +1,41 @@
+{
+  "name": "captureguard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "pretest": "node scripts/setup-test-db.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed:eval": "tsx scripts/seed-eval-dataset.ts",
+    "db:seed:demo": "tsx scripts/create-demo-payments.ts",
+    "db:seed:merchant": "tsx scripts/seed-merchant.ts",
+    "demo:reset": "tsx scripts/reset-demo.ts"
+  },
+  "dependencies": {
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "@prisma/client": "^6.3.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.2",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "prisma": "^6.3.0",
+    "tsx": "^4.19.2",
+    "vitest": "^3.0.4",
+    "dotenv": "^16.6.1"
+  }
+}
