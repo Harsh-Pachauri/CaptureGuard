@@ -11,6 +11,7 @@ import { Nav } from "./Nav";
 // lightest, most neutral tier.
 const AMBIENT_TIER_BY_PREFIX: Array<[string, string]> = [
   ["/overview", "ambient-overview"],
+  ["/test-lab", "ambient-overview"],
   ["/inbox", "ambient-decision"],
 ];
 
@@ -25,14 +26,17 @@ function ambientTierFor(pathname: string | null): string {
  * through untouched. Only reason this needs to be a client component is
  * usePathname(), used to vary the ambient background's intensity by
  * section without duplicating this markup once per page.
+ *
+ * `role` is optional and only ever "judge" (Judge Demo sessions) —
+ * admin/undefined renders exactly as before, unchanged.
  */
-export function DashboardShell({ children }: { children: ReactNode }) {
+export function DashboardShell({ children, role }: { children: ReactNode; role?: "judge" }) {
   const pathname = usePathname();
   const tier = ambientTierFor(pathname);
 
   return (
     <div className={`min-h-screen bg-slate-50 dark:bg-slate-950 ${tier}`}>
-      <Nav />
+      <Nav role={role} />
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
     </div>
   );

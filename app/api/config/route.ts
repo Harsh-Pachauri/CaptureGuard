@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkApiAuth } from "@/lib/api/auth";
+import { checkApiAuth, requireNonJudge } from "@/lib/api/auth";
 import { prisma } from "@/lib/db/client";
 import { getMerchant } from "@/lib/db/merchant";
 
@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const authError = await checkApiAuth(req);
   if (authError) return authError;
+  const judgeError = await requireNonJudge(req);
+  if (judgeError) return judgeError;
 
   let body: unknown;
   try {

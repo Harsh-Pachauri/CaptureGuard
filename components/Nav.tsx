@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const LINKS = [
   { href: "/overview", label: "Overview" },
+  { href: "/test-lab", label: "Test Lab" },
   { href: "/inbox", label: "Support Inbox" },
   { href: "/payments", label: "Payments" },
   { href: "/audit", label: "Audit Trail" },
@@ -12,13 +13,15 @@ const LINKS = [
   { href: "/admin", label: "Admin" },
 ];
 
-export function Nav() {
+/** `role` is optional and only ever "judge" — admin/undefined shows every link, unchanged from before. */
+export function Nav({ role }: { role?: "judge" } = {}) {
   const pathname = usePathname();
   const router = useRouter();
+  const links = role === "judge" ? LINKS.filter((l) => l.href !== "/admin") : LINKS;
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
+    router.push(role === "judge" ? "/judge" : "/login");
     router.refresh();
   }
 
@@ -29,8 +32,13 @@ export function Nav() {
           <Link href="/overview" className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
             🛡 CaptureGuard
           </Link>
+          {role === "judge" ? (
+            <span className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-amber-700 dark:text-amber-400">
+              Judge Session
+            </span>
+          ) : null}
           <nav className="flex items-center gap-1">
-            {LINKS.map((link) => {
+            {links.map((link) => {
               const active = pathname?.startsWith(link.href);
               return (
                 <Link

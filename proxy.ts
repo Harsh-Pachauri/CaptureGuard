@@ -11,35 +11,59 @@ import type { SessionData } from "@/lib/auth/session";
 // already-rendered dashboard routes; Proxy runs on every request.
 //
 // "/" is the public landing page (unauthenticated, pre-login) — the
-// dashboard home lives at "/overview" instead.
-const PROTECTED_PREFIXES = ["/overview", "/inbox", "/payments", "/audit", "/eval", "/admin", "/dev"];
+// dashboard home lives at "/overview" instead. "/test-lab" is included so a
+// judge session (and admin) must be logged in to reach it, same as every
+// other dashboard route.
+const PROTECTED_PREFIXES = ["/overview", "/inbox", "/payments", "/audit", "/eval", "/admin", "/dev", "/test-lab"];
 
-async function isLoggedIn(req: NextRequest): Promise<boolean> {
+// Judge Demo sessions (role: "judge" — see lib/auth/session.ts) may reach
+// every protected prefix above EXCEPT these. Kept as its own list rather
+// than editing PROTECTED_PREFIXES's meaning, so removing the Judge Demo
+// later is just deleting this block and the judge-only branches below.
+const ADMIN_ONLY_PREFIXES = ["/admin"];
+
+async function readSession(req: NextRequest): Promise<{ loggedIn: boolean; role?: SessionData["role"] }> {
   const sealed = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   const password = process.env.SESSION_SECRET;
-  if (!sealed || !password || password.length < 32) return false;
+  if (!sealed || !password || password.length < 32) return { loggedIn: false };
   try {
     const data = await unsealData<SessionData>(sealed, { password });
-    return Boolean(data.isLoggedIn);
+    return { loggedIn: Boolean(data.isLoggedIn), role: data.role };
   } catch {
-    return false;
+    return { loggedIn: false };
   }
 }
 
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const loggedIn = await isLoggedIn(req);
+  const { loggedIn, role } = await readSession(req);
+  const isJudge = loggedIn && role === "judge";
 
   if (pathname === "/login") {
-    if (loggedIn) return NextResponse.redirect(new URL("/overview", req.url));
+    if (loggedIn) return NextResponse.redirect(new URL(isJudge ? "/test-lab" : "/overview", req.url));
     return NextResponse.next();
+  }
+
+  // "/judge" is the Judge Demo's own entry point (parallel to "/login") —
+  // same already-logged-in redirect shape, just routed to each role's home.
+  if (pathname === "/judge") {
+    if (loggedIn) return NextResponse.redirect(new URL(isJudge ? "/test-lab" : "/overview", req.url));
+    return NextResponse.next();
+  }
+
+  const isAdminOnly = ADMIN_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  if (isAdminOnly && isJudge) {
+    return NextResponse.redirect(new URL("/test-lab", req.url));
   }
 
   const isProtected = PROTECTED_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
   if (isProtected && !loggedIn) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    // Send an unauthenticated judge-flow visit back to the judge entry
+    // point rather than the admin login page they have no password for.
+    const dest = pathname.startsWith("/test-lab") ? "/judge" : "/login";
+    return NextResponse.redirect(new URL(dest, req.url));
   }
 
   return NextResponse.next();

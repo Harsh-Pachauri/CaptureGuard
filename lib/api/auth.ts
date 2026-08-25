@@ -42,3 +42,21 @@ export async function checkApiAuth(req: NextRequest): Promise<NextResponse | nul
 
   return checkBearerAuth(req);
 }
+
+/**
+ * Extra gate for routes that mutate production configuration or otherwise
+ * shouldn't be reachable from a Judge Demo session — call this AFTER
+ * checkApiAuth already passed. A judge session is a valid logged-in
+ * session (so checkApiAuth alone lets it through, same as admin), but it
+ * must not reach these specific routes. Bearer-token callers and every
+ * existing admin session (role is never "judge" for those) are
+ * unaffected — this only ever blocks a session that
+ * app/api/auth/judge-login/route.ts created.
+ */
+export async function requireNonJudge(req: NextRequest): Promise<NextResponse | null> {
+  const session = await getSessionForRequest(req, scratchResponse());
+  if (session.isLoggedIn && session.role === "judge") {
+    return NextResponse.json({ error: "Not available in the Judge Demo" }, { status: 403 });
+  }
+  return null;
+}

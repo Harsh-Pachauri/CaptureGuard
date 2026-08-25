@@ -7,6 +7,14 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
 
 export interface SessionData {
   isLoggedIn: boolean;
+  /**
+   * Absent (undefined) for every existing admin session — those never set
+   * this field, so `role !== "judge"` is what "has full/admin access"
+   * means everywhere it's checked. Only app/api/auth/judge-login/route.ts
+   * ever sets this to "judge"; lib/api/auth.ts#requireNonJudge and
+   * proxy.ts read it to gate admin-only surfaces from judge sessions.
+   */
+  role?: "judge";
 }
 
 function sessionOptions() {
