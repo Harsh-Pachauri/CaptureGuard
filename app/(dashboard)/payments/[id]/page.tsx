@@ -4,6 +4,7 @@ import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/client/apiClient";
 import { StatusBadge, DataSourceBadge, VerdictBadge } from "@/components/badges";
+import { useStaggerReveal } from "@/lib/client/useStaggerReveal";
 
 const AGENT_ID = "agent_demo";
 const RECONCILIATION_EVENT_TYPES = ["payment_state_reconciled", "invalid_state_transition_rejected"];
@@ -24,6 +25,7 @@ interface Payment {
 interface WebhookEvent {
   id: string;
   eventType: string;
+  razorpayEventId: string;
   signatureValid: boolean;
   processedAt: string | null;
   createdAt: string;
@@ -44,6 +46,7 @@ interface Action {
   overrideReason: string | null;
   agentId: string;
   createdAt: string;
+  executedAt: string | null;
 }
 interface Detail {
   payment: Payment;
@@ -58,6 +61,147 @@ interface AuditEvent {
   eventType: string;
   detail: { from?: string; to?: string; razorpayPaymentId?: string };
   createdAt: string;
+}
+
+interface TimelineNode {
+  id: string;
+  timestamp: string;
+  title: string;
+  observed: boolean;
+  evidence: Record<string, unknown> | null;
+}
+
+/**
+ * Merges the three real event sources already returned by GET
+ * /api/payments/:id (webhookEvents, decisions, actions) plus the
+ * already-fetched reconciliation audit events into one chronological
+ * forensic record. No new data, no new API calls — purely a client-side
+ * re-presentation of what's already on the page. "Not observed" nodes are
+ * derived the same way: only from real fields (payment.status,
+ * payment.captured) checked against the real webhook list, never guessed.
+ */
+function buildForensicTimeline(data: Detail, reconciliationEvents: AuditEvent[]): TimelineNode[] {
+  const nodes: TimelineNode[] = [];
+  const hasWebhook = (type: string) => data.timeline.some((e) => e.eventType === type);
+
+  if (data.payment.status !== "created" && data.payment.status !== "failed" && !hasWebhook("payment.authorized")) {
+    nodes.push({
+      id: "gap-authorized",
+      timestamp: data.payment.razorpayCreatedAt,
+      title: "payment.authorized webhook — not observed",
+      observed: false,
+      evidence: null,
+    });
+  }
+  if (data.payment.captured && !hasWebhook("payment.captured")) {
+    nodes.push({
+      id: "gap-captured",
+      timestamp: data.payment.lastSyncedAt,
+      title: "payment.captured webhook — not observed (state reflects a live/manual sync instead)",
+      observed: false,
+      evidence: null,
+    });
+  }
+
+  for (const ev of data.timeline) {
+    nodes.push({
+      id: `wh-${ev.id}`,
+      timestamp: ev.createdAt,
+      title: `${ev.eventType} webhook received${ev.signatureValid ? "" : " — signature invalid"}`,
+      observed: true,
+      evidence: { razorpayEventId: ev.razorpayEventId, signatureValid: ev.signatureValid, processedAt: ev.processedAt },
+    });
+  }
+
+  for (const d of data.decisions) {
+    nodes.push({
+      id: `dec-${d.id}`,
+      timestamp: d.createdAt,
+      title: `Decision: ${d.verdict} · ${d.ruleId} (${d.requestedAction})`,
+      observed: true,
+      evidence: { verdict: d.verdict, ruleId: d.ruleId, requestedAction: d.requestedAction, explanation: d.explanation },
+    });
+  }
+
+  for (const a of data.actions) {
+    nodes.push({
+      id: `act-staged-${a.id}`,
+      timestamp: a.createdAt,
+      title:
+        a.state === "blocked"
+          ? `Action blocked (${a.actionType})`
+          : `Action staged (${a.actionType}) — awaiting confirmation`,
+      observed: true,
+      evidence: { actionType: a.actionType, state: a.state, agentId: a.agentId, overrideReason: a.overrideReason },
+    });
+    // executedAt is a distinct, real, separately-stored timestamp — confirm
+    // and execute happen atomically server-side, so this single node
+    // honestly represents both rather than inventing a separate
+    // "confirmed" moment the data doesn't have.
+    if (a.executedAt) {
+      nodes.push({
+        id: `act-executed-${a.id}`,
+        timestamp: a.executedAt,
+        title:
+          a.state === "executed"
+            ? `Action confirmed & executed${a.overrideReason ? " (via override)" : ""}${a.razorpayRefundId ? ` — refund ${a.razorpayRefundId}` : ""}`
+            : `Action confirmed & executed, state now "${a.state}"`,
+        observed: true,
+        evidence: { state: a.state, razorpayRefundId: a.razorpayRefundId, overrideReason: a.overrideReason },
+      });
+    }
+  }
+
+  for (const ev of reconciliationEvents) {
+    nodes.push({
+      id: `rec-${ev.id}`,
+      timestamp: ev.createdAt,
+      title:
+        ev.eventType === "payment_state_reconciled"
+          ? `Live state verified — reconciled: ${ev.detail.from ?? "?"} → ${ev.detail.to ?? "?"}`
+          : `Live state verified — unexpected transition logged, not applied: ${ev.detail.from ?? "?"} → ${ev.detail.to ?? "?"}`,
+      observed: true,
+      evidence: ev.detail as Record<string, unknown>,
+    });
+  }
+
+  return nodes.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
+
+function TimelineNodeRow({ node, visible }: { node: TimelineNode; visible: boolean }) {
+  return (
+    <li
+      className={`relative pl-6 pb-5 last:pb-0 transition-all duration-200 ease-out motion-reduce:transition-none motion-reduce:duration-0 ${
+        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1"
+      }`}
+    >
+      <span
+        className={`absolute left-0 top-1 h-2.5 w-2.5 rounded-full border-2 ${
+          node.observed
+            ? "border-slate-900 bg-slate-900 dark:border-slate-100 dark:bg-slate-100"
+            : "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950"
+        }`}
+        aria-hidden
+      />
+      <span className="absolute left-[4.5px] top-4 bottom-0 w-px bg-slate-200 dark:bg-slate-800" aria-hidden />
+      <div className="flex items-baseline justify-between gap-3">
+        <span className={`text-sm ${node.observed ? "text-slate-800 dark:text-slate-200" : "text-amber-700 dark:text-amber-400 italic"}`}>
+          {node.title}
+        </span>
+        <span className="shrink-0 font-mono text-xs text-slate-400">{new Date(node.timestamp).toLocaleString()}</span>
+      </div>
+      {node.evidence ? (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 select-none">
+            Evidence
+          </summary>
+          <pre className="mt-1.5 overflow-x-auto rounded bg-slate-50 dark:bg-slate-950 p-2 font-mono text-xs text-slate-600 dark:text-slate-400">
+            {JSON.stringify(node.evidence, null, 2)}
+          </pre>
+        </details>
+      ) : null}
+    </li>
+  );
 }
 
 export default function PaymentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -75,7 +219,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
       .catch((err) => setError(err.message));
     // Surfaces reconciliation events already produced by the sync route and
     // the webhook's invalid-transition check — no new backend data, just
-    // reading /api/audit filtered to this payment (Section: RECONCILIATION).
+    // reading /api/audit filtered to this payment.
     apiFetch<{ events: AuditEvent[] }>(`/api/audit?refTable=payments&refId=${id}&limit=20`)
       .then((r) => setReconciliationEvents(r.events.filter((e) => RECONCILIATION_EVENT_TYPES.includes(e.eventType))))
       .catch(() => setReconciliationEvents([]));
@@ -147,10 +291,16 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // Hooks must run unconditionally on every render — compute this before
+  // the early returns below, with a safe empty default while data is
+  // still loading, rather than calling useStaggerReveal after a return.
+  const forensicNodes = data ? buildForensicTimeline(data, reconciliationEvents ?? []) : [];
+  const revealedCount = useStaggerReveal(forensicNodes.length, id, 50);
+
   if (error) return <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700">{error}</div>;
   if (!data) return <div className="text-sm text-slate-400">Loading…</div>;
 
-  const { payment, timeline, decisions, actions } = data;
+  const { payment, decisions, actions } = data;
   const latestCaptureDecision = decisions.find((d) => d.requestedAction === "capture") ?? null;
   const latestCaptureAction = actions.find((a) => a.actionType === "capture") ?? null;
 
@@ -177,73 +327,37 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
           <button
             onClick={sync}
             disabled={syncing}
-            className="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+            className="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors duration-150 ease-out motion-reduce:transition-none"
           >
             {syncing ? "Syncing…" : "Re-sync from Razorpay"}
           </button>
         </div>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-          <div><dt className="text-slate-400 text-xs">amount</dt><dd className="text-slate-900 dark:text-slate-100">{payment.currency} {(payment.amount / 100).toFixed(2)}</dd></div>
-          <div><dt className="text-slate-400 text-xs">captured</dt><dd className="text-slate-900 dark:text-slate-100">{String(payment.captured)}</dd></div>
-          <div><dt className="text-slate-400 text-xs">order id</dt><dd className="text-slate-900 dark:text-slate-100 font-mono text-xs">{payment.razorpayOrderId ?? "—"}</dd></div>
-          <div><dt className="text-slate-400 text-xs">customer ref</dt><dd className="text-slate-900 dark:text-slate-100">{payment.customerRef ?? "—"}</dd></div>
-          <div><dt className="text-slate-400 text-xs">created at (Razorpay)</dt><dd className="text-slate-900 dark:text-slate-100">{new Date(payment.razorpayCreatedAt).toLocaleString()}</dd></div>
-          <div><dt className="text-slate-400 text-xs">last synced</dt><dd className="text-slate-900 dark:text-slate-100">{new Date(payment.lastSyncedAt).toLocaleString()}</dd></div>
+        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4 font-mono">
+          <div><dt className="text-slate-400 text-xs font-sans">amount</dt><dd className="text-slate-900 dark:text-slate-100">{payment.currency} {(payment.amount / 100).toFixed(2)}</dd></div>
+          <div><dt className="text-slate-400 text-xs font-sans">captured</dt><dd className="text-slate-900 dark:text-slate-100">{String(payment.captured)}</dd></div>
+          <div><dt className="text-slate-400 text-xs font-sans">order id</dt><dd className="text-slate-900 dark:text-slate-100 text-xs">{payment.razorpayOrderId ?? "—"}</dd></div>
+          <div><dt className="text-slate-400 text-xs font-sans">customer ref</dt><dd className="text-slate-900 dark:text-slate-100">{payment.customerRef ?? "—"}</dd></div>
+          <div><dt className="text-slate-400 text-xs font-sans">created at (Razorpay)</dt><dd className="text-slate-900 dark:text-slate-100">{new Date(payment.razorpayCreatedAt).toLocaleString()}</dd></div>
+          <div><dt className="text-slate-400 text-xs font-sans">last synced</dt><dd className="text-slate-900 dark:text-slate-100">{new Date(payment.lastSyncedAt).toLocaleString()}</dd></div>
         </dl>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-3">Webhook timeline</div>
-          {timeline.length === 0 ? (
-            <div className="text-sm text-slate-400">No webhook events recorded yet for this payment.</div>
-          ) : (
-            <ul className="space-y-2">
-              {timeline.map((ev) => (
-                <li key={ev.id} className="flex items-center justify-between text-sm border-b border-slate-50 dark:border-slate-800/50 pb-2 last:border-0">
-                  <span className="text-slate-800 dark:text-slate-200">{ev.eventType}</span>
-                  <span className="text-xs text-slate-400">{new Date(ev.createdAt).toLocaleString()}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-3">Decisions & actions</div>
-          {decisions.length === 0 ? (
-            <div className="text-sm text-slate-400">No decisions made against this payment yet.</div>
-          ) : (
-            <ul className="space-y-3">
-              {decisions.map((d) => (
-                <li key={d.id} className="border-b border-slate-50 dark:border-slate-800/50 pb-3 last:border-0">
-                  <div className="flex items-center justify-between">
-                    <VerdictBadge verdict={d.verdict} ruleId={d.ruleId} />
-                    <span className="text-xs text-slate-400">{new Date(d.createdAt).toLocaleString()}</span>
-                  </div>
-                  <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">{d.explanation}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-          {actions.length > 0 ? (
-            <div className="mt-4 border-t border-slate-100 dark:border-slate-800 pt-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-2">Actions</div>
-              <ul className="space-y-1.5 text-xs">
-                {actions.map((a) => (
-                  <li key={a.id} className="flex items-center justify-between">
-                    <span className="text-slate-700 dark:text-slate-300">
-                      {a.actionType} · {a.state} · {a.agentId}
-                      {a.razorpayRefundId ? ` · refund ${a.razorpayRefundId}` : ""}
-                    </span>
-                    <span className="text-slate-400">{new Date(a.createdAt).toLocaleString()}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Forensic timeline</div>
+        <p className="text-xs text-slate-400 mb-4">
+          Every recorded webhook, decision, action, and reconciliation event for this payment, in order. Amber
+          entries are expected events that were not actually observed — never invented to fill a gap.
+        </p>
+        {forensicNodes.length === 0 ? (
+          <div className="text-sm text-slate-400">No recorded events for this payment yet.</div>
+        ) : (
+          <ul>
+            {forensicNodes.map((node, i) => (
+              <TimelineNodeRow key={node.id} node={node} visible={revealedCount > i} />
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
@@ -252,7 +366,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
           <button
             onClick={requestCapture}
             disabled={captureBusy}
-            className="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+            className="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors duration-150 ease-out motion-reduce:transition-none"
           >
             {captureBusy ? "Checking…" : "Request capture"}
           </button>
@@ -269,21 +383,24 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
                 <button
                   onClick={() => attemptCapture(latestCaptureDecision.id)}
                   disabled={captureBusy}
-                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors duration-150 ease-out motion-reduce:transition-none"
                 >
                   Stage capture
                 </button>
               ) : latestCaptureAction.state === "pending" ? (
-                <button
-                  onClick={() => confirmCapture(latestCaptureAction.id)}
-                  disabled={captureBusy}
-                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  Confirm & execute — real Razorpay Capture API call
-                </button>
+                <>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Staged only — Razorpay has not been called yet.</div>
+                  <button
+                    onClick={() => confirmCapture(latestCaptureAction.id)}
+                    disabled={captureBusy}
+                    className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors duration-150 ease-out motion-reduce:transition-none"
+                  >
+                    {captureBusy ? "Confirming…" : "Confirm & execute — real Razorpay Capture API call"}
+                  </button>
+                </>
               ) : latestCaptureAction.state === "executed" ? (
                 <div className="rounded-md bg-emerald-50 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 p-3 text-xs text-emerald-800 dark:text-emerald-300">
-                  Captured. Payment status above reflects the fresh Razorpay re-fetch.
+                  Executed — Razorpay confirmed the mutation. Payment status above reflects the fresh re-fetch.
                 </div>
               ) : (
                 <div className="rounded-md bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 p-3 text-xs text-red-800 dark:text-red-300">
@@ -294,7 +411,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
               <button
                 onClick={requestCapture}
                 disabled={captureBusy}
-                className="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+                className="rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors duration-150 ease-out motion-reduce:transition-none"
               >
                 Re-check
               </button>
@@ -302,27 +419,6 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
           </div>
         )}
         {captureError ? <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-700">{captureError}</div> : null}
-      </div>
-
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-        <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-3">Live-state reconciliation</div>
-        {reconciliationEvents === null ? (
-          <div className="text-sm text-slate-400">Loading…</div>
-        ) : reconciliationEvents.length === 0 ? (
-          <div className="text-sm text-slate-400">No drift has been detected/corrected for this payment yet.</div>
-        ) : (
-          <ul className="space-y-2">
-            {reconciliationEvents.map((ev) => (
-              <li key={ev.id} className="flex items-center justify-between text-sm border-b border-slate-50 dark:border-slate-800/50 pb-2 last:border-0">
-                <span className="text-slate-800 dark:text-slate-200">
-                  {ev.eventType}
-                  {ev.detail.from && ev.detail.to ? ` — ${ev.detail.from} → ${ev.detail.to}` : ""}
-                </span>
-                <span className="text-xs text-slate-400">{new Date(ev.createdAt).toLocaleString()}</span>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </div>
   );
