@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { Logo } from "@/components/Logo";
 import { PipelineStep } from "@/components/PipelineStep";
 import { LiveBadge } from "@/components/LiveBadge";
 import { type Verdict, VERDICT_CARD_CLASSES } from "@/lib/verdict";
@@ -48,7 +49,7 @@ export default function AboutPage() {
       <header className="border-b border-slate-200 dark:border-slate-800">
         <div className="mx-auto max-w-4xl px-4 py-4 flex items-center justify-between">
           <Link href="/" className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
-            🛡 CaptureGuard
+            <Logo size={20} /> CaptureGuard
           </Link>
           <div className="flex items-center gap-4">
             <Link

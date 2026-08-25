@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Logo } from "./Logo";
 
 /**
  * Structurally parallel to LoginForm.tsx (same fetch/session pattern) but
@@ -52,7 +53,9 @@ export function JudgeAccessForm() {
           className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm"
         >
           <div className="text-xs font-mono uppercase tracking-widest text-slate-400">Judge Demo · Test Lab</div>
-          <h1 className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">🛡 CaptureGuard</h1>
+          <h1 className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <Logo size={20} /> CaptureGuard
+          </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             A restricted session for running the three real scenarios — no admin access, no production
             configuration, no secrets.

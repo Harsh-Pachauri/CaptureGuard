@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { Logo } from "@/components/Logo";
 import { VerdictTraceDemo } from "@/components/VerdictTraceDemo";
 import { VerdictHighlightProvider } from "@/components/verdict-highlight-context";
 import { VerdictPillGroup } from "@/components/VerdictPillGroup";
@@ -46,7 +47,9 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white dark:bg-slate-950 ambient-landing">
       <header className="border-b border-slate-200 dark:border-slate-800">
         <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-          <span className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight">🛡 CaptureGuard</span>
+          <span className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+            <Logo size={22} /> CaptureGuard
+          </span>
           <div className="flex items-center gap-4">
             <Link
               href="/about"

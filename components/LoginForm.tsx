@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Logo } from "./Logo";
 
 /**
  * Corner-bracket framing around the login card — a secure-terminal
@@ -73,7 +74,9 @@ export function LoginForm() {
           <div className="text-xs font-mono uppercase tracking-widest text-slate-400">
             Access · Merchant Ops Console
           </div>
-          <h1 className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">🛡 CaptureGuard</h1>
+          <h1 className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <Logo size={20} /> CaptureGuard
+          </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Merchant support operations · Razorpay Test Mode.
           </p>
