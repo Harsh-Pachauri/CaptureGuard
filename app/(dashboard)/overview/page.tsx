@@ -72,15 +72,28 @@ export default function OverviewPage() {
 
       {error ? <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* Headline stat — the number that actually demonstrates the product's
+          value, given the visual weight it deserves instead of sitting as
+          one of four equal tiles. Same evalMetrics.moneyProtectedPaise the
+          Evaluation Dashboard computes; nothing recalculated here. */}
+      <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-6">
+        <div className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+          Duplicate-payout risk prevented
+        </div>
+        <div className="mt-2 text-4xl sm:text-5xl font-bold tracking-tight tabular-nums text-emerald-900 dark:text-emerald-200">
+          {evalMetrics ? `₹${(evalMetrics.moneyProtectedPaise / 100).toLocaleString("en-IN")}` : "—"}
+        </div>
+        <div className="mt-1 text-sm text-emerald-800/80 dark:text-emerald-300/80">
+          {evalMetrics
+            ? `across a ${evalMetrics.totalCases}-case evaluation batch · false-allow rate ${(evalMetrics.falseAllowRate * 100).toFixed(0)}%`
+            : "run an evaluation to compute this"}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Tile label="Payments synced" value={payments ? String(realPayments.length) : "…"} sub={`${payments?.length ?? 0} total incl. demo/eval`} />
         <Tile label="Queries handled" value={queries ? String(queries.length) : "…"} />
         <Tile label="Blocks issued" value={blocks ? String(blocks.length) : "…"} tone="danger" />
-        <Tile
-          label="Duplicate-payout risk prevented"
-          value={evalMetrics ? `₹${(evalMetrics.moneyProtectedPaise / 100).toLocaleString("en-IN")}` : "—"}
-          sub={evalMetrics ? `across ${evalMetrics.totalCases}-case eval batch, false-allow rate ${(evalMetrics.falseAllowRate * 100).toFixed(0)}%` : "run an evaluation first"}
-        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

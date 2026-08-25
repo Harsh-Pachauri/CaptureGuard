@@ -4,8 +4,25 @@ const VERDICT_STYLES: Record<string, string> = {
   ESCALATE: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",
 };
 
-export function VerdictBadge({ verdict, ruleId }: { verdict: string; ruleId?: string | null }) {
+export function VerdictBadge({
+  verdict,
+  ruleId,
+  size = "sm",
+}: {
+  verdict: string;
+  ruleId?: string | null;
+  /** "lg" is for the one place a verdict should be the page's focal point — the Decision Panel. Every other usage (lists, history) stays "sm". */
+  size?: "sm" | "lg";
+}) {
   const style = VERDICT_STYLES[verdict] ?? "bg-slate-100 text-slate-700 border-slate-300";
+  if (size === "lg") {
+    return (
+      <span className={`inline-flex items-baseline gap-3 rounded-lg border-2 px-5 py-3 ${style}`}>
+        <span className="text-3xl sm:text-4xl font-bold tracking-tight">{verdict}</span>
+        {ruleId ? <span className="text-sm font-mono opacity-70">{ruleId}</span> : null}
+      </span>
+    );
+  }
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold tracking-wide ${style}`}>
       {verdict}

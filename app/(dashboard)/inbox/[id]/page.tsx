@@ -62,6 +62,15 @@ interface QueryDetail {
 
 const AGENT_ID = "agent_demo";
 
+// Verdict-tinted banner for the Decision Panel's focal card — restrained,
+// same semantic colors VerdictBadge already uses, just applied to the
+// section background instead of a small pill.
+const VERDICT_BANNER: Record<string, string> = {
+  ALLOW: "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900",
+  BLOCK: "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900",
+  ESCALATE: "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900",
+};
+
 export default function DecisionPanelPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
   const [data, setData] = useState<QueryDetail | null>(null);
@@ -195,8 +204,13 @@ export default function DecisionPanelPage({ params }: { params: Promise<{ id: st
       </div>
 
       {extraction ? (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-400">AI extraction (structured, validated)</div>
+        <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 p-5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs font-mono text-slate-400">01</span>
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              AI interpretation — not authoritative
+            </span>
+          </div>
           <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
             <div><dt className="text-slate-400">intent</dt><dd className="text-slate-900 dark:text-slate-100">{extraction.intent}</dd></div>
             <div><dt className="text-slate-400">requested_action</dt><dd className="text-slate-900 dark:text-slate-100">{extraction.requested_action}</dd></div>
@@ -210,17 +224,27 @@ export default function DecisionPanelPage({ params }: { params: Promise<{ id: st
       ) : null}
 
       {decision ? (
-        <div className="rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 p-5">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-400">CaptureGuard decision</div>
-            <VerdictBadge verdict={decision.verdict} ruleId={decision.ruleId} />
+        <div
+          className={`rounded-xl border-2 overflow-hidden ${
+            VERDICT_BANNER[decision.verdict] ?? "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+          }`}
+        >
+          <div className="p-5 sm:p-6">
+            <div className="text-xs font-mono text-slate-500 dark:text-slate-400">03 · Deterministic decision</div>
+            <div className="mt-2">
+              <VerdictBadge verdict={decision.verdict} ruleId={decision.ruleId} size="lg" />
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-slate-800 dark:text-slate-200 max-w-2xl">{decision.explanation}</p>
           </div>
-          <div className="p-5 space-y-4">
-            <p className="text-sm leading-relaxed text-slate-800 dark:text-slate-200">{decision.explanation}</p>
-
+          <div className="bg-white dark:bg-slate-900 border-t border-slate-900/10 dark:border-slate-100/10 p-5 space-y-4">
             {snapshot?.razorpayPaymentId ? (
-              <div className="rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 p-4">
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-2">Razorpay evidence (live-fetched)</div>
+              <div className="rounded-lg bg-slate-50 dark:bg-slate-950 border-2 border-slate-900/15 dark:border-slate-100/20 p-4">
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-xs font-mono text-slate-500">02</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
+                    Razorpay — live, authoritative state
+                  </span>
+                </div>
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
                   <div><dt className="text-slate-400">payment id</dt><dd className="font-mono text-slate-900 dark:text-slate-100">{snapshot.razorpayPaymentId}</dd></div>
                   <div><dt className="text-slate-400">status</dt><dd>{snapshot.status ? <StatusBadge status={snapshot.status} /> : "—"}</dd></div>
@@ -239,7 +263,13 @@ export default function DecisionPanelPage({ params }: { params: Promise<{ id: st
 
             {isMoneyAction ? (
               <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-2">Action Guard</div>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-xs font-mono text-slate-500">04</span>
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Action Guard</span>
+                </div>
+                <p className="mb-3 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  AI can propose an action. It cannot execute it. A separate confirmation is required before money moves.
+                </p>
 
                 {decision.verdict === "BLOCK" ? (
                   <div className="space-y-2">

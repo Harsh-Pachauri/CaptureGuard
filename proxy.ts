@@ -9,7 +9,10 @@ import type { SessionData } from "@/lib/auth/session";
 // checkApiAuth (API routes). This exists specifically because layouts don't
 // always re-run their check on client-side soft navigation between two
 // already-rendered dashboard routes; Proxy runs on every request.
-const PROTECTED_PREFIXES = ["/", "/inbox", "/payments", "/audit", "/eval", "/admin", "/dev"];
+//
+// "/" is the public landing page (unauthenticated, pre-login) — the
+// dashboard home lives at "/overview" instead.
+const PROTECTED_PREFIXES = ["/overview", "/inbox", "/payments", "/audit", "/eval", "/admin", "/dev"];
 
 async function isLoggedIn(req: NextRequest): Promise<boolean> {
   const sealed = req.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -28,7 +31,7 @@ export default async function proxy(req: NextRequest) {
   const loggedIn = await isLoggedIn(req);
 
   if (pathname === "/login") {
-    if (loggedIn) return NextResponse.redirect(new URL("/", req.url));
+    if (loggedIn) return NextResponse.redirect(new URL("/overview", req.url));
     return NextResponse.next();
   }
 

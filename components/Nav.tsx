@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 const LINKS = [
-  { href: "/", label: "Overview" },
+  { href: "/overview", label: "Overview" },
   { href: "/inbox", label: "Support Inbox" },
   { href: "/payments", label: "Payments" },
   { href: "/audit", label: "Audit Trail" },
@@ -26,12 +26,12 @@ export function Nav() {
     <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
       <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <Link href="/" className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+          <Link href="/overview" className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
             🛡 CaptureGuard
           </Link>
           <nav className="flex items-center gap-1">
             {LINKS.map((link) => {
-              const active = link.href === "/" ? pathname === "/" : pathname?.startsWith(link.href);
+              const active = pathname?.startsWith(link.href);
               return (
                 <Link
                   key={link.href}

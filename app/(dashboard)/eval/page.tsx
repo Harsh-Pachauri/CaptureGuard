@@ -91,6 +91,10 @@ export default function EvalPage() {
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Real, re-runnable measurement against the exact production pipeline — never a static number.
         </p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Every case below runs through the identical AI extraction → live-state fetch → Decision Engine code the
+          Support Inbox uses — only the payment state comes from a seeded fixture instead of a live Razorpay call.
+        </p>
       </div>
 
       {/* 1. Evaluation dataset — fixed, versioned test data, independent of any run. */}
