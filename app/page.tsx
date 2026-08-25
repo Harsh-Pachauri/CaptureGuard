@@ -88,7 +88,7 @@ export default function LandingPage() {
                 How a decision actually happens
               </h2>
 
-              <div className="mt-10 sm:mt-12 max-w-3xl">
+              <div className="mt-10 sm:mt-12 max-w-3xl -mb-8">
                 <PipelineStep index={1} total={3} title="AI interprets">
                   <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">Extract intent from the request.</p>
                 </PipelineStep>

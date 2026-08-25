@@ -4,6 +4,26 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+/**
+ * Corner-bracket framing around the login card — a secure-terminal
+ * viewfinder motif, not a literal shield. Sized to a box modestly larger
+ * than the card's own footprint (measured at ~384px x ~300px including
+ * the "back" link above the form). Static, non-interactive, and behind
+ * the card via -z-10 on a shared relative/-z-10 ancestor.
+ */
+function SecureFrameBrackets() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center">
+      <div className="relative w-[420px] max-w-[calc(100%-32px)] h-[300px]">
+        <span className="absolute top-0 left-0 h-6 w-6 border-t border-l border-slate-500/5 dark:border-slate-400/10" />
+        <span className="absolute top-0 right-0 h-6 w-6 border-t border-r border-slate-500/5 dark:border-slate-400/10" />
+        <span className="absolute bottom-0 left-0 h-6 w-6 border-b border-l border-slate-500/5 dark:border-slate-400/10" />
+        <span className="absolute bottom-0 right-0 h-6 w-6 border-b border-r border-slate-500/5 dark:border-slate-400/10" />
+      </div>
+    </div>
+  );
+}
+
 export function LoginForm() {
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -36,7 +56,9 @@ export function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 ambient-login px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 px-4">
+      <div aria-hidden className="login-grid pointer-events-none absolute inset-0 -z-10" />
+      <SecureFrameBrackets />
       <div className="w-full max-w-sm">
         <Link
           href="/"
