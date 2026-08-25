@@ -43,7 +43,7 @@ function CTALink({ children }: { children: ReactNode }) {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950">
+    <div className="min-h-screen bg-white dark:bg-slate-950 ambient-landing">
       <header className="border-b border-slate-200 dark:border-slate-800">
         <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
           <span className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight">🛡 CaptureGuard</span>
@@ -76,19 +76,19 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              <div className="order-1 lg:order-2">
+              <div className="order-1 lg:order-2 flex lg:min-h-[480px]">
                 <VerdictTraceDemo />
               </div>
             </div>
           </section>
 
           <section className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/20">
-            <div className="py-14">
+            <div className="py-20 sm:py-24">
               <h2 className="text-xs font-mono uppercase tracking-widest text-slate-500 dark:text-slate-500">
                 How a decision actually happens
               </h2>
 
-              <div className="mt-8">
+              <div className="mt-10 sm:mt-12 max-w-3xl">
                 <PipelineStep index={1} total={3} title="AI interprets">
                   <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">Extract intent from the request.</p>
                 </PipelineStep>

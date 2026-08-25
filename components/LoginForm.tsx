@@ -36,7 +36,7 @@ export function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 ambient-login px-4">
       <div className="w-full max-w-sm">
         <Link
           href="/"

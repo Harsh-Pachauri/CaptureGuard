@@ -58,3 +58,52 @@ body {
     opacity: 1;
   }
 }
+
+/* Ambient gradient background system — subtle, static radial "light"
+   layers for depth, painted via background-image alongside each page's
+   existing bg-* background-color utility (both properties coexist on the
+   same element, so the flat color still shows through everywhere the
+   gradient fades out). One consistent cool slate/indigo light language
+   across the whole app; only opacity varies by page tier, from the
+   landing hero (strongest) down to Login (barely there). No motion — the
+   gradients are single, non-repeating, and never animated, so there is
+   nothing for prefers-reduced-motion to need to disable.
+   Tier order (loudest to quietest): ambient-landing > ambient-overview >
+   ambient-decision > ambient-neutral > ambient-login. */
+.ambient-landing {
+  background-image:
+    radial-gradient(ellipse 900px 600px at 78% -8%, rgba(99, 102, 241, 0.06), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 8% 18%, rgba(56, 189, 248, 0.045), transparent 60%);
+}
+.ambient-overview {
+  background-image: radial-gradient(ellipse 900px 500px at 50% -10%, rgba(99, 102, 241, 0.035), transparent 60%);
+}
+.ambient-decision {
+  background-image: radial-gradient(ellipse 800px 500px at 20% -10%, rgba(99, 102, 241, 0.026), transparent 60%);
+}
+.ambient-neutral {
+  background-image: radial-gradient(ellipse 800px 500px at 50% -10%, rgba(99, 102, 241, 0.018), transparent 60%);
+}
+.ambient-login {
+  background-image: radial-gradient(ellipse 700px 500px at 50% 20%, rgba(99, 102, 241, 0.014), transparent 60%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ambient-landing {
+    background-image:
+      radial-gradient(ellipse 900px 600px at 78% -8%, rgba(99, 102, 241, 0.11), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 8% 18%, rgba(56, 189, 248, 0.07), transparent 60%);
+  }
+  .ambient-overview {
+    background-image: radial-gradient(ellipse 900px 500px at 50% -10%, rgba(99, 102, 241, 0.07), transparent 60%);
+  }
+  .ambient-decision {
+    background-image: radial-gradient(ellipse 800px 500px at 20% -10%, rgba(99, 102, 241, 0.055), transparent 60%);
+  }
+  .ambient-neutral {
+    background-image: radial-gradient(ellipse 800px 500px at 50% -10%, rgba(99, 102, 241, 0.04), transparent 60%);
+  }
+  .ambient-login {
+    background-image: radial-gradient(ellipse 700px 500px at 50% 20%, rgba(99, 102, 241, 0.03), transparent 60%);
+  }
+}
