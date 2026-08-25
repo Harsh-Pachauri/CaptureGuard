@@ -49,6 +49,12 @@ export default function LandingPage() {
           <span className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight">🛡 CaptureGuard</span>
           <div className="flex items-center gap-4">
             <Link
+              href="/about"
+              className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/40 dark:focus-visible:ring-slate-100/40 rounded"
+            >
+              About
+            </Link>
+            <Link
               href="/judge"
               className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/40 dark:focus-visible:ring-slate-100/40 rounded"
             >
