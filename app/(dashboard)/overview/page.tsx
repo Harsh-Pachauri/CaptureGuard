@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/client/apiClient";
+import { useStaggerReveal } from "@/lib/client/useStaggerReveal";
 
 interface Payment {
   id: string;
@@ -23,9 +24,13 @@ interface EvalMetrics {
   moneyProtectedPaise: number;
 }
 
-function Tile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "danger" | "default" }) {
+function Tile({ label, value, sub, tone, visible }: { label: string; value: string; sub?: string; tone?: "danger" | "default"; visible: boolean }) {
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+    <div
+      className={`rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 transition-all duration-200 ease-out motion-reduce:transition-none motion-reduce:duration-0 ${
+        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1"
+      }`}
+    >
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
       <div className={`mt-2 text-3xl font-semibold tabular-nums ${tone === "danger" ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-slate-100"}`}>
         {value}
@@ -60,6 +65,15 @@ export default function OverviewPage() {
 
   const realPayments = payments?.filter((p) => p.dataSource === "real") ?? [];
 
+  // One-time reveal, gated on real data actually arriving: resetKey only
+  // changes from "pending" to "ready" once every fetch has resolved, so
+  // the stagger starts counting from that moment, never from mount. Tiles
+  // stay statically visible (no animation) while still loading — `visible`
+  // below only defers to `revealed` once `allLoaded` is true.
+  const allLoaded = payments !== null && queries !== null && blocks !== null && evalMetrics !== null;
+  const revealed = useStaggerReveal(4, allLoaded ? "ready" : "pending", 90);
+  const tileVisible = (i: number) => !allLoaded || revealed > i;
+
   return (
     <div className="space-y-6">
       <div>
@@ -76,7 +90,11 @@ export default function OverviewPage() {
           value, given the visual weight it deserves instead of sitting as
           one of four equal tiles. Same evalMetrics.moneyProtectedPaise the
           Evaluation Dashboard computes; nothing recalculated here. */}
-      <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-6">
+      <div
+        className={`rounded-xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-6 transition-all duration-200 ease-out motion-reduce:transition-none motion-reduce:duration-0 ${
+          tileVisible(0) ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1"
+        }`}
+      >
         <div className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
           Duplicate-payout risk prevented
         </div>
@@ -91,9 +109,9 @@ export default function OverviewPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <Tile label="Payments synced" value={payments ? String(realPayments.length) : "…"} sub={`${payments?.length ?? 0} total incl. demo/eval`} />
-        <Tile label="Queries handled" value={queries ? String(queries.length) : "…"} />
-        <Tile label="Blocks issued" value={blocks ? String(blocks.length) : "…"} tone="danger" />
+        <Tile label="Payments synced" value={payments ? String(realPayments.length) : "…"} sub={`${payments?.length ?? 0} total incl. demo/eval`} visible={tileVisible(1)} />
+        <Tile label="Queries handled" value={queries ? String(queries.length) : "…"} visible={tileVisible(2)} />
+        <Tile label="Blocks issued" value={blocks ? String(blocks.length) : "…"} tone="danger" visible={tileVisible(3)} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

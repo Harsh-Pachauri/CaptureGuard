@@ -88,6 +88,7 @@ export default function AuditPage() {
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [eventType, setEventType] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     const qs = eventType ? `?eventType=${encodeURIComponent(eventType)}&limit=200` : "?limit=200";
@@ -133,26 +134,52 @@ export default function AuditPage() {
         ) : events.length === 0 ? (
           <div className="p-4 text-sm text-slate-400">No audit events yet.</div>
         ) : (
-          events.map((ev) => (
-            <div key={ev.id} className="p-4">
-              <div className="flex items-center justify-between gap-4">
-                <span className={`text-xs font-mono uppercase tracking-wide ${EVENT_TONE[ev.eventType] ?? "text-slate-500 dark:text-slate-400"}`}>
-                  {ev.eventType}
-                </span>
-                <span className="text-xs text-slate-400 shrink-0">{new Date(ev.createdAt).toLocaleString()}</span>
+          events.map((ev) => {
+            const selected = events.find((e) => e.id === selectedId) ?? null;
+            const isSelected = ev.id === selectedId;
+            // The only relationship the flat audit stream actually
+            // supports without inventing a cross-table join: two rows
+            // that reference the exact same (refTable, refId) pair, e.g.
+            // action_blocked + override_recorded for the same action id.
+            // Events on a different refId are left independent rather
+            // than guessing at a decision→action chain the data here
+            // doesn't encode.
+            const isRelated =
+              !isSelected && selected !== null && ev.refTable === selected.refTable && ev.refId === selected.refId;
+            return (
+              <div
+                key={ev.id}
+                onClick={() => setSelectedId(isSelected ? null : ev.id)}
+                className={`p-4 cursor-pointer border-l-2 transition-colors duration-150 ease-out motion-reduce:transition-none ${
+                  isSelected
+                    ? "border-l-slate-900 dark:border-l-slate-100 bg-slate-50 dark:bg-slate-800/60"
+                    : isRelated
+                      ? "border-l-slate-400 dark:border-l-slate-600 bg-slate-50/60 dark:bg-slate-800/30"
+                      : "border-l-transparent hover:bg-slate-50/60 dark:hover:bg-slate-800/30"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <span className={`text-xs font-mono uppercase tracking-wide ${EVENT_TONE[ev.eventType] ?? "text-slate-500 dark:text-slate-400"}`}>
+                    {ev.eventType}
+                  </span>
+                  <span className="text-xs text-slate-400 shrink-0">{new Date(ev.createdAt).toLocaleString()}</span>
+                </div>
+                <p className="mt-1 text-sm text-slate-800 dark:text-slate-200 leading-relaxed">{describeEvent(ev)}</p>
+                <div className="mt-1 text-xs text-slate-400">
+                  {ev.refTable} · {ev.refId}
+                  {isRelated ? <span className="ml-2 text-slate-500 dark:text-slate-400">— same {ev.refTable.replace(/s$/, "")} as selected</span> : null}
+                </div>
+                <details className="mt-2 group" onClick={(e) => e.stopPropagation()}>
+                  <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 select-none">
+                    Raw event detail
+                  </summary>
+                  <pre className="mt-2 overflow-x-auto rounded bg-slate-50 dark:bg-slate-950 p-2 text-xs text-slate-600 dark:text-slate-400">
+                    {JSON.stringify(ev.detail, null, 2)}
+                  </pre>
+                </details>
               </div>
-              <p className="mt-1 text-sm text-slate-800 dark:text-slate-200 leading-relaxed">{describeEvent(ev)}</p>
-              <div className="mt-1 text-xs text-slate-400">{ev.refTable} · {ev.refId}</div>
-              <details className="mt-2 group">
-                <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 select-none">
-                  Raw event detail
-                </summary>
-                <pre className="mt-2 overflow-x-auto rounded bg-slate-50 dark:bg-slate-950 p-2 text-xs text-slate-600 dark:text-slate-400">
-                  {JSON.stringify(ev.detail, null, 2)}
-                </pre>
-              </details>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { VerdictTraceDemo } from "@/components/VerdictTraceDemo";
 
 type Verdict = "ALLOW" | "BLOCK" | "ESCALATE";
 
@@ -24,46 +25,6 @@ function VerdictCard({ verdict, ruleId, explanation }: { verdict: Verdict; ruleI
         <span className="text-xs font-mono opacity-70">{ruleId}</span>
       </div>
       <p className="mt-2 text-sm leading-relaxed">{explanation}</p>
-    </div>
-  );
-}
-
-/**
- * Static "Verdict Trace" exhibit — deliberately not wired to any API. No
- * payment id, amount, or timestamp is invented; only the categorical facts
- * that actually drive R4 (status, captured, window) are shown, matching
- * lib/decision-engine/rules.ts's real R4 condition exactly.
- */
-function VerdictTrace() {
-  return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/30 p-5 sm:p-6 space-y-4">
-      <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Verified Test Mode example</div>
-
-      <div>
-        <div className="text-[10px] font-mono uppercase tracking-wide text-slate-400 mb-1">Customer request</div>
-        <p className="text-sm text-slate-700 dark:text-slate-300">&ldquo;Please refund my payment.&rdquo;</p>
-      </div>
-
-      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white/40 dark:bg-slate-950/30 p-3">
-        <div className="text-[10px] font-mono uppercase tracking-wide text-slate-400 mb-1.5">AI interpretation — not authoritative</div>
-        <div className="font-mono text-xs text-slate-500 dark:text-slate-500 space-y-0.5">
-          <div>intent: <span className="text-slate-700 dark:text-slate-300">refund_request</span></div>
-          <div>requested_action: <span className="text-slate-700 dark:text-slate-300">refund</span></div>
-        </div>
-      </div>
-
-      <div className="rounded-lg border-2 border-slate-900/15 dark:border-slate-100/20 bg-white dark:bg-slate-950 p-3.5">
-        <div className="text-[10px] font-mono uppercase tracking-wide text-slate-700 dark:text-slate-300 font-semibold mb-1.5">
-          LIVE · RAZORPAY
-        </div>
-        <div className="font-mono text-xs text-slate-800 dark:text-slate-200 space-y-0.5">
-          <div>status: <span className="font-semibold">authorized</span></div>
-          <div>captured: <span className="font-semibold">false</span></div>
-          <div>window: <span className="font-semibold">within auto-reversal window</span></div>
-        </div>
-      </div>
-
-      <VerdictCard verdict="BLOCK" ruleId="R4" explanation={R4_EXPLANATION} />
     </div>
   );
 }
@@ -107,7 +68,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <VerdictTrace />
+            <VerdictTraceDemo />
           </div>
         </section>
 

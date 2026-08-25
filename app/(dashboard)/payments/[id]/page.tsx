@@ -5,6 +5,8 @@ import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/client/apiClient";
 import { StatusBadge, DataSourceBadge, VerdictBadge } from "@/components/badges";
 import { useStaggerReveal } from "@/lib/client/useStaggerReveal";
+import { useNewlyAdded } from "@/lib/client/useNewlyAdded";
+import { formatRelativeTime } from "@/lib/client/formatRelativeTime";
 
 const AGENT_ID = "agent_demo";
 const RECONCILIATION_EVENT_TYPES = ["payment_state_reconciled", "invalid_state_transition_rejected"];
@@ -168,12 +170,12 @@ function buildForensicTimeline(data: Detail, reconciliationEvents: AuditEvent[])
   return nodes.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 }
 
-function TimelineNodeRow({ node, visible }: { node: TimelineNode; visible: boolean }) {
+function TimelineNodeRow({ node, visible, isNew }: { node: TimelineNode; visible: boolean; isNew: boolean }) {
   return (
     <li
-      className={`relative pl-6 pb-5 last:pb-0 transition-all duration-200 ease-out motion-reduce:transition-none motion-reduce:duration-0 ${
+      className={`relative pl-6 pb-5 last:pb-0 rounded-md transition-[opacity,transform,background-color] duration-300 ease-out motion-reduce:transition-none motion-reduce:duration-0 ${
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1"
-      }`}
+      } ${isNew ? "bg-blue-50 dark:bg-blue-950/40" : "bg-transparent"}`}
     >
       <span
         className={`absolute left-0 top-1 h-2.5 w-2.5 rounded-full border-2 ${
@@ -187,6 +189,7 @@ function TimelineNodeRow({ node, visible }: { node: TimelineNode; visible: boole
       <div className="flex items-baseline justify-between gap-3">
         <span className={`text-sm ${node.observed ? "text-slate-800 dark:text-slate-200" : "text-amber-700 dark:text-amber-400 italic"}`}>
           {node.title}
+          {isNew ? <span className="ml-2 text-[10px] font-mono uppercase tracking-wide text-blue-600 dark:text-blue-400">new</span> : null}
         </span>
         <span className="shrink-0 font-mono text-xs text-slate-400">{new Date(node.timestamp).toLocaleString()}</span>
       </div>
@@ -296,6 +299,8 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
   // still loading, rather than calling useStaggerReveal after a return.
   const forensicNodes = data ? buildForensicTimeline(data, reconciliationEvents ?? []) : [];
   const revealedCount = useStaggerReveal(forensicNodes.length, id, 50);
+  const webhookNodeIds = forensicNodes.filter((n) => n.id.startsWith("wh-")).map((n) => n.id);
+  const newlyAddedWebhookIds = useNewlyAdded(webhookNodeIds);
 
   if (error) return <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700">{error}</div>;
   if (!data) return <div className="text-sm text-slate-400">Loading…</div>;
@@ -339,7 +344,13 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
           <div><dt className="text-slate-400 text-xs font-sans">order id</dt><dd className="text-slate-900 dark:text-slate-100 text-xs">{payment.razorpayOrderId ?? "—"}</dd></div>
           <div><dt className="text-slate-400 text-xs font-sans">customer ref</dt><dd className="text-slate-900 dark:text-slate-100">{payment.customerRef ?? "—"}</dd></div>
           <div><dt className="text-slate-400 text-xs font-sans">created at (Razorpay)</dt><dd className="text-slate-900 dark:text-slate-100">{new Date(payment.razorpayCreatedAt).toLocaleString()}</dd></div>
-          <div><dt className="text-slate-400 text-xs font-sans">last synced</dt><dd className="text-slate-900 dark:text-slate-100">{new Date(payment.lastSyncedAt).toLocaleString()}</dd></div>
+          <div>
+            <dt className="text-slate-400 text-xs font-sans">last synced</dt>
+            <dd className="text-slate-900 dark:text-slate-100">
+              {new Date(payment.lastSyncedAt).toLocaleString()}{" "}
+              <span className="text-slate-400 text-xs">({formatRelativeTime(payment.lastSyncedAt)})</span>
+            </dd>
+          </div>
         </dl>
       </div>
 
@@ -354,7 +365,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
         ) : (
           <ul>
             {forensicNodes.map((node, i) => (
-              <TimelineNodeRow key={node.id} node={node} visible={revealedCount > i} />
+              <TimelineNodeRow key={node.id} node={node} visible={revealedCount > i} isNew={newlyAddedWebhookIds.has(node.id)} />
             ))}
           </ul>
         )}

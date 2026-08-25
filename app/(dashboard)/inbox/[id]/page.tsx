@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/client/apiClient";
 import { VerdictBadge, StatusBadge } from "@/components/badges";
 import { useStaggerReveal } from "@/lib/client/useStaggerReveal";
+import { formatRelativeTime } from "@/lib/client/formatRelativeTime";
 
 interface Snapshot {
   razorpayPaymentId?: string;
@@ -362,6 +363,11 @@ export default function DecisionPanelPage({ params }: { params: Promise<{ id: st
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-300">
                   Verify with Razorpay — LIVE, authoritative
                 </span>
+                {snapshot.checkedAt ? (
+                  <span className="text-[10px] font-mono text-slate-400" title={new Date(snapshot.checkedAt).toLocaleString()}>
+                    verified {formatRelativeTime(snapshot.checkedAt)}
+                  </span>
+                ) : null}
               </div>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3 font-mono">
                 <div><dt className="text-slate-400 font-sans">payment id</dt><dd className="text-slate-900 dark:text-slate-100">{snapshot.razorpayPaymentId}</dd></div>
