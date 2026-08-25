@@ -1,160 +1,134 @@
 "use client";
 
-import { useState } from "react";
-import { useStaggerReveal } from "@/lib/client/useStaggerReveal";
+import { useEffect, useState } from "react";
+import { LiveBadge } from "./LiveBadge";
+import { useVerdictHighlight } from "./verdict-highlight-context";
+import { usePrefersReducedMotion } from "@/lib/motion-hooks";
+import { VERDICT_CARD_CLASSES } from "@/lib/verdict";
+import { DECISION_CASES } from "@/lib/decision-cases";
 
-type Verdict = "ALLOW" | "BLOCK" | "ESCALATE";
+const AUTO_ADVANCE_MS = 5500;
 
-const VERDICT_COLORS: Record<Verdict, string> = {
-  ALLOW: "border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200",
-  BLOCK: "border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-200",
-  ESCALATE: "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 text-amber-900 dark:text-amber-200",
-};
+export function VerdictTraceDemo() {
+  const { setActive: setHighlightedVerdict } = useVerdictHighlight();
+  const reducedMotion = usePrefersReducedMotion();
+  const [activeId, setActiveId] = useState(DECISION_CASES[0].id);
+  const [autoAdvancing, setAutoAdvancing] = useState(true);
 
-interface Scenario {
-  key: string;
-  tabLabel: string;
-  request: string;
-  aiInterpretation: { intent: string; requestedAction: string } | null;
-  aiNote: string;
-  evidence: { status: string; captured: string; window: string };
-  verdict: Verdict;
-  ruleId: string;
-  explanation: string;
-}
+  const active = DECISION_CASES.find((c) => c.id === activeId) ?? DECISION_CASES[0];
 
-/**
- * Three real Decision Engine outcomes (lib/decision-engine/rules.ts R4,
- * R9, R11), paraphrased the same honest way the original static R4
- * exhibit was: only the categorical facts that actually drive each rule,
- * no invented payment id/amount/timestamp. Capture scenarios have no "AI
- * interpretation" because capture requests genuinely skip AI extraction
- * in this codebase (they name an exact payment, not free text) — shown
- * as an explicit "not applicable" rather than fabricating intent/
- * requested_action fields that don't exist for that path.
- */
-const SCENARIOS: Scenario[] = [
-  {
-    key: "refund",
-    tabLabel: "Refund",
-    request: '"Please refund my payment."',
-    aiInterpretation: { intent: "refund_request", requestedAction: "refund" },
-    aiNote: "",
-    evidence: { status: "authorized", captured: "false", window: "within auto-reversal window" },
-    verdict: "BLOCK",
-    ruleId: "R4",
-    explanation:
-      "Razorpay is already reversing this payment automatically. Refunding it now could double-pay the customer.",
-  },
-  {
-    key: "capture",
-    tabLabel: "Capture",
-    request: "Merchant requests capture on an authorized, uncaptured payment.",
-    aiInterpretation: null,
-    aiNote: "Not applicable — capture names an exact payment, so there's nothing for AI to interpret.",
-    evidence: { status: "authorized", captured: "false", window: "within auto-reversal window" },
-    verdict: "ALLOW",
-    ruleId: "R9",
-    explanation:
-      "Authorized, not yet captured, and within the auto-reversal window. Capturing now is the ordinary case — proceeding calls Razorpay's real Capture API once confirmed.",
-  },
-  {
-    key: "failed",
-    tabLabel: "Failed payment",
-    request: "Merchant requests capture on this payment.",
-    aiInterpretation: null,
-    aiNote: "Not applicable — capture names an exact payment, so there's nothing for AI to interpret.",
-    evidence: { status: "failed", captured: "false", window: "—" },
-    verdict: "ESCALATE",
-    ruleId: "R11",
-    explanation:
-      "Doesn't match the known-safe capture pattern (authorized, uncaptured, within the window). Rather than guess, this is flagged for a human to check the Razorpay Dashboard directly.",
-  },
-];
+  useEffect(() => {
+    setHighlightedVerdict(active.verdict);
+  }, [active.verdict, setHighlightedVerdict]);
 
-function VerdictCard({ verdict, ruleId, explanation }: { verdict: Verdict; ruleId: string; explanation: string }) {
+  useEffect(() => {
+    if (!autoAdvancing || reducedMotion) return;
+    const timer = setInterval(() => {
+      setActiveId((current) => {
+        const index = DECISION_CASES.findIndex((c) => c.id === current);
+        return DECISION_CASES[(index + 1) % DECISION_CASES.length].id;
+      });
+    }, AUTO_ADVANCE_MS);
+    return () => clearInterval(timer);
+  }, [autoAdvancing, reducedMotion]);
+
+  function selectCase(id: string) {
+    setAutoAdvancing(false); // manual selection takes permanent control of the exhibit
+    setActiveId(id);
+  }
+
   return (
-    <div className={`rounded-xl border-2 p-4 ${VERDICT_COLORS[verdict]}`}>
-      <div className="flex items-baseline gap-2">
-        <span className="text-2xl font-bold tracking-tight">{verdict}</span>
-        <span className="text-xs font-mono opacity-70">{ruleId}</span>
+    <div className="rounded-2xl border-2 border-slate-900/10 dark:border-slate-100/15 bg-white dark:bg-slate-900/40 p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          Replayed · a real recorded decision
+        </span>
+        <LiveBadge pulseKey={active.id} />
       </div>
-      <p className="mt-2 text-sm leading-relaxed">{explanation}</p>
+
+      <div className="mt-4 flex gap-1.5" role="tablist" aria-label="Recorded decisions">
+        {DECISION_CASES.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            role="tab"
+            aria-selected={c.id === active.id}
+            onClick={() => selectCase(c.id)}
+            className={`flex-1 rounded-md border px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/40 dark:focus-visible:ring-slate-100/40 ${
+              c.id === active.id
+                ? "border-slate-900 dark:border-slate-100 bg-slate-900 dark:bg-slate-100"
+                : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+            }`}
+          >
+            <div
+              className={`text-[10px] font-mono uppercase tracking-wide ${
+                c.id === active.id ? "text-white/60 dark:text-slate-900/60" : "text-slate-400 dark:text-slate-500"
+              }`}
+            >
+              {c.ruleId}
+            </div>
+            <div
+              className={`text-xs font-medium ${
+                c.id === active.id ? "text-white dark:text-slate-900" : "text-slate-600 dark:text-slate-400"
+              }`}
+            >
+              {c.label}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div key={active.id} className="mt-5 motion-safe:animate-[trace-in_0.2s_ease-out]">
+        <TraceRow index={1} total={3} title="Request" mono={active.request} />
+        <TraceRow index={2} total={3} title="AI interprets" mono={active.aiIntent} />
+        <TraceRow index={3} total={3} title="Razorpay verifies" mono={active.razorpayField} live />
+
+        <div className="pt-2">
+          <div
+            className={`rounded-xl border-2 p-4 motion-safe:animate-[verdict-in_0.25s_ease-out] ${VERDICT_CARD_CLASSES[active.verdict]}`}
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl font-bold tracking-tight">{active.verdict}</span>
+              <span className="text-xs font-mono opacity-70">{active.ruleId}</span>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed">{active.explanation}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-/**
- * Interactive Verdict Trace exhibit: three selectable real scenarios
- * driving the same 4-stage layout. Deliberately not wired to any API —
- * switching tabs only swaps which static scenario object is shown, no
- * Razorpay call, no Decision Engine execution. Reuses useStaggerReveal
- * exactly as it's used in the Decision Panel, keyed on the scenario so it
- * replays on every tab switch.
- */
-export function VerdictTraceDemo() {
-  const [selected, setSelected] = useState(0);
-  const scenario = SCENARIOS[selected];
-  const revealed = useStaggerReveal(4, scenario.key, 55);
-  const stage = (n: number) =>
-    `transition-all duration-200 ease-out motion-reduce:transition-none motion-reduce:duration-0 ${
-      revealed > n ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1"
-    }`;
-
+function TraceRow({
+  index,
+  total,
+  title,
+  mono,
+  live,
+}: {
+  index: number;
+  total: number;
+  title: string;
+  mono: string;
+  live?: boolean;
+}) {
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/30 p-5 sm:p-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Verified Test Mode example</div>
-        <div className="flex gap-1" role="tablist" aria-label="Example scenario">
-          {SCENARIOS.map((s, i) => (
-            <button
-              key={s.key}
-              type="button"
-              role="tab"
-              aria-selected={i === selected}
-              onClick={() => setSelected(i)}
-              className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors duration-150 ease-out motion-reduce:transition-none ${
-                i === selected
-                  ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
-            >
-              {s.tabLabel}
-            </button>
-          ))}
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center pt-0.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700" />
+        {index < total && <span className="mt-1 w-px flex-1 bg-slate-200 dark:bg-slate-800" />}
+      </div>
+      <div className="flex-1 pb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-slate-400 dark:text-slate-600">0{index}</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{title}</span>
+          {live && (
+            <span className="text-[9px] font-mono uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+              live
+            </span>
+          )}
         </div>
-      </div>
-
-      <div className={stage(0)}>
-        <div className="text-[10px] font-mono uppercase tracking-wide text-slate-400 mb-1">Request</div>
-        <p className="text-sm text-slate-700 dark:text-slate-300">{scenario.request}</p>
-      </div>
-
-      <div className={`rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white/40 dark:bg-slate-950/30 p-3 ${stage(1)}`}>
-        <div className="text-[10px] font-mono uppercase tracking-wide text-slate-400 mb-1.5">AI interpretation — not authoritative</div>
-        {scenario.aiInterpretation ? (
-          <div className="font-mono text-xs text-slate-500 dark:text-slate-500 space-y-0.5">
-            <div>intent: <span className="text-slate-700 dark:text-slate-300">{scenario.aiInterpretation.intent}</span></div>
-            <div>requested_action: <span className="text-slate-700 dark:text-slate-300">{scenario.aiInterpretation.requestedAction}</span></div>
-          </div>
-        ) : (
-          <p className="text-xs text-slate-500 dark:text-slate-500">{scenario.aiNote}</p>
-        )}
-      </div>
-
-      <div className={`rounded-lg border-2 border-slate-900/15 dark:border-slate-100/20 bg-white dark:bg-slate-950 p-3.5 ${stage(2)}`}>
-        <div className="text-[10px] font-mono uppercase tracking-wide text-slate-700 dark:text-slate-300 font-semibold mb-1.5">
-          LIVE · RAZORPAY
-        </div>
-        <div className="font-mono text-xs text-slate-800 dark:text-slate-200 space-y-0.5">
-          <div>status: <span className="font-semibold">{scenario.evidence.status}</span></div>
-          <div>captured: <span className="font-semibold">{scenario.evidence.captured}</span></div>
-          <div>window: <span className="font-semibold">{scenario.evidence.window}</span></div>
-        </div>
-      </div>
-
-      <div className={stage(3)}>
-        <VerdictCard verdict={scenario.verdict} ruleId={scenario.ruleId} explanation={scenario.explanation} />
+        <div className="mt-1 font-mono text-xs text-slate-800 dark:text-slate-200 break-all">{mono}</div>
       </div>
     </div>
   );

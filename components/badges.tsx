@@ -1,4 +1,7 @@
-const VERDICT_STYLES: Record<string, string> = {
+// Exported so other verdict-colored UI (e.g. the landing page's exhibit,
+// via lib/verdict.ts) can reuse the exact same color set instead of
+// forking a second copy that could drift from this one.
+export const VERDICT_STYLES: Record<string, string> = {
   ALLOW: "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
   BLOCK: "bg-red-50 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800",
   ESCALATE: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",
