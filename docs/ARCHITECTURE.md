@@ -1,7 +1,7 @@
 # CaptureGuard — Architecture
 
-One Next.js app (App Router), one Postgres-compatible database (SQLite locally, Postgres/Supabase in
-production), one frontend. No microservices, no message queue.
+One Next.js app (App Router), one Postgres database (Prisma Postgres — separate dev/test/prod
+databases, see `.env.example`), one frontend. No microservices, no message queue.
 
 ## Module map
 
@@ -14,18 +14,21 @@ production), one frontend. No microservices, no message queue.
     webhookVerify.ts            HMAC-SHA256 signature verification
     http.ts                     retry-with-backoff, RazorpayUnavailableError
   /decision-engine
-    types.ts, rules.ts, engine.ts   pure functions, zero I/O, the rule table (R0..R8)
+    types.ts, rules.ts, engine.ts   pure functions, zero I/O, the rule table (R0..R11 — R9-R11 are
+                                     the capture-mirror rules, see "Capture-mirror (R9–R11)" below)
   /ai
     schema.ts                   Zod structured-output contract + validation
     extract.ts                  AIExtractionService — talks to the configured provider, returns IntentExtraction|null
     fallbackMatcher.ts          deterministic keyword fallback (English + Hinglish)
-    providers/anthropic.ts      one interchangeable adapter behind AI_PROVIDER
+    providers/anthropic.ts, providers/gemini.ts   interchangeable adapters behind AI_PROVIDER
     index.ts                    resolveExtraction() — the single entry point production AND eval both call
   /matcher/paymentMatcher.ts    explicit-reference-first, customer-ref heuristic fallback, DB-validated
   /payment-state/service.ts     normalization, invalid-transition rejection, getLive() (mandatory fresh fetch), applyEvent()
   /action-guard/actionGuard.ts  attempt / confirmAndExecute / override — verdict re-checked server-side every time
   /audit/auditService.ts        append-only record() + query()
-  /pipeline/runSupportQuery.ts  orchestrates AI → Matcher → live fetch → Decision Engine → persistence, once
+  /pipeline
+    runSupportQuery.ts          orchestrates AI → Matcher → live fetch → Decision Engine → persistence, once (R0–R8)
+    runCaptureRequest.ts        the capture-mirror entry point — no AI step, an exact payment id in, a Decision out (R9–R11)
   /eval/runner.ts               replays eval_cases through the SAME pipeline, with a fixture-reading payment source
   /db/client.ts, merchant.ts    Prisma singleton, single-merchant lookup
 /prisma/schema.prisma           schema (Section 4 of the blueprint)
@@ -87,7 +90,10 @@ through the live path instead of the eval runner's fixture-reading path.
 
 ## Local dev vs. deployment
 
-Locally: SQLite (`prisma/schema.prisma`, `provider = "sqlite"`), zero external services required.
-For deployment: change `provider` to `"postgresql"`, point `DATABASE_URL` at Supabase (or any
-Postgres), run `npx prisma db push`. Every field type used in the schema (`String`, `Int`, `Float`,
-`Boolean`, `DateTime`, `Json`) is portable across both providers — no other schema changes needed.
+`prisma/schema.prisma` targets Postgres unconditionally (`provider = "postgresql"`) — there is no
+SQLite mode and no provider to switch. Three separate Postgres databases are selected by environment
+variable alone, never by a schema change: `DATABASE_URL`/`DIRECT_URL` (local dev — CaptureGuard-dev),
+`TEST_DATABASE_URL`/`TEST_DIRECT_URL` (the automated test suite only — reset and pushed against on
+every `npm test` run, see `tests/setup/env.ts`; `npm run dev` never touches it), and the production
+database, configured only in the hosting platform's own environment variables, never committed to
+this repo's `.env`.

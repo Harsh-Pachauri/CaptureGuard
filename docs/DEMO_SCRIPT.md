@@ -25,17 +25,24 @@ IF IT FAILS: `No merchant row found` → run `npm run db:seed:merchant` first.
 DO: `npm run dev`, then open `http://localhost:3000`.
 BEHIND THE SCENES: Boots the Next.js dev server.
 WHY: Everything below needs it running.
-EXPECT: Terminal shows `Ready`. Browser shows a token prompt (first visit) or the Overview page.
+EXPECT: Terminal shows `Ready`. Browser shows the public landing page.
 IF IT FAILS: Port 3000 busy → another `next dev` is already running; stop it first.
 
-**Step 3 — Log in to the dashboard (first visit only).**
-DO: Paste your `INTERNAL_API_TOKEN` (from `.env`) into the field and click **Continue**.
-BEHIND THE SCENES: Saved to the browser's local storage; attached as a bearer token to every
-dashboard API call from now on.
-WHY: Every `/api/*` route except the webhook receiver requires it.
+**Step 3 — Log in to the dashboard.**
+DO: Click **Sign in** from the landing page (or go straight to `/login`) and enter the admin password.
+BEHIND THE SCENES: A real, HttpOnly-cookie session is created (`lib/auth/session.ts`) — the browser
+doesn't hold or send any token itself. This rehearsal script uses the admin login throughout, not the
+separate Judge Demo (`/judge` → `/test-lab`), because Step 12c needs `/admin`'s safety-window control
+— a restricted Judge Demo session is deliberately not allowed to reach `/admin` at all. If you haven't
+set an admin password yet: `npx tsx scripts/hash-admin-password.ts "your chosen password"` and put the
+printed hash in `ADMIN_PASSWORD_HASH` in `.env`.
+WHY: Every dashboard route and `/api/*` route (except the webhook receiver) requires an authenticated
+session.
 EXPECT: You land on **Overview**, with KPI tiles (Payments synced, Queries handled, Blocks issued,
 Duplicate-payout risk prevented).
-IF IT FAILS: 401 errors everywhere → wrong token; check `.env`.
+IF IT FAILS: "Invalid password" → check it matches what `ADMIN_PASSWORD_HASH` in `.env` was generated
+from. Bounced straight back to `/login` → `SESSION_SECRET` in `.env` isn't set to 32+ random
+characters.
 
 **Step 4 — Create the four real Razorpay orders.**
 DO: In a terminal, run `npx tsx scripts/create-demo-payments.ts` (or `npm run db:seed:demo`). Keep
@@ -216,7 +223,7 @@ it."*
 ## Demo-day checklist
 
 - [ ] Ran `npm run demo:reset` if this isn't the first attempt today
-- [ ] `npm run dev` running, logged into the dashboard with the token
+- [ ] `npm run dev` running, logged into the dashboard with the admin password
 - [ ] `npx tsx scripts/create-demo-payments.ts` run; A, B, C checkouts completed (E can wait)
 - [ ] Payment A refunded (Step 9) *before* judges arrive, so Payment D is ready to go in one click
 - [ ] `/admin` safety window is `24` (not left shortened from the ESCALATE step)

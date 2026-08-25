@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { Logo } from "./Logo";
 
 const LINKS = [
   { href: "/overview", label: "Overview" },
@@ -30,7 +31,7 @@ export function Nav({ role }: { role?: "judge" } = {}) {
       <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <Link href="/overview" className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
-            🛡 CaptureGuard
+            <Logo size={20} /> CaptureGuard
           </Link>
           {role === "judge" ? (
             <span className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-amber-700 dark:text-amber-400">
