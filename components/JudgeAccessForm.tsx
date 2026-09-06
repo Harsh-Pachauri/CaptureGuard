@@ -13,7 +13,11 @@ import { Logo } from "./Logo";
  */
 export function JudgeAccessForm() {
   const router = useRouter();
-  const [code, setCode] = useState("");
+  // Pre-filled on purpose: this code is intentionally public-facing (buildathon
+  // judges shouldn't need a side-channel to try the demo). It only ever grants
+  // the restricted judge role — no admin access, no production config, no
+  // secrets — see the docstring above.
+  const [code, setCode] = useState("YourNewJudgePassword");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
